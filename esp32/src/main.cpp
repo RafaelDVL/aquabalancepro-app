@@ -8,6 +8,7 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <Adafruit_NeoPixel.h>
+#include <time.h>
 
 // --- Configurações Gerais ---
 #define TEMPO_POR_ML 700
@@ -47,8 +48,14 @@ Adafruit_NeoPixel statusLed(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 // --- Variáveis de Controle ---
 unsigned long lastFirebaseReconnectAttempt = 0;
 const unsigned long firebaseReconnectInterval = 600000;
+const unsigned long firebaseStatusLogInterval = 10000;
 unsigned long lastWifiAttempt = 0;
 const unsigned long wifiReconnectInterval = 15000;
+unsigned long lastTimeSyncAttempt = 0;
+const unsigned long timeSyncInterval = 60000;
+bool timeSynced = false;
+const long gmtOffsetSec = -3 * 3600;
+const int daylightOffsetSec = 0;
 
 // --- Estruturas ---
 struct PendingLog {
@@ -171,16 +178,72 @@ void logWifiStatusChange() {
   }
 }
 
+void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
+  switch (event) {
+    case ARDUINO_EVENT_WIFI_STA_START:
+      Serial.println("[wifi] STA start");
+      break;
+    case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+      Serial.println("[wifi] STA connected to AP");
+      break;
+    case ARDUINO_EVENT_WIFI_STA_GOT_IP: {
+      IPAddress ip(info.got_ip.ip_info.ip.addr);
+      Serial.printf("[wifi] STA got IP: %s\n", ip.toString().c_str());
+      break;
+    }
+    case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+      Serial.printf("[wifi] STA disconnected, reason: %d\n",
+                    info.wifi_sta_disconnected.reason);
+      break;
+    default:
+      break;
+  }
+}
+
+void ensureTimeSynced() {
+  if (timeSynced || WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+
+  if (millis() - lastTimeSyncAttempt < timeSyncInterval) {
+    return;
+  }
+
+  lastTimeSyncAttempt = millis();
+  Serial.println("[time] syncing via NTP");
+  configTime(gmtOffsetSec, daylightOffsetSec, "pool.ntp.org", "time.nist.gov");
+
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo, 5000)) {
+    timeSynced = true;
+    Serial.printf("[time] synced: %04d-%02d-%02d %02d:%02d:%02d\n",
+                  timeinfo.tm_year + 1900,
+                  timeinfo.tm_mon + 1,
+                  timeinfo.tm_mday,
+                  timeinfo.tm_hour,
+                  timeinfo.tm_min,
+                  timeinfo.tm_sec);
+    Serial.println("[firebase] refresh token after time sync");
+    Firebase.refreshToken(&config);
+  } else {
+    Serial.println("[time] sync failed");
+  }
+}
+
 void logFirebaseStatusChange() {
   static bool lastReady = false;
   static bool initialized = false;
+  static unsigned long lastLog = 0;
   bool ready = Firebase.ready();
-  if (initialized && ready == lastReady) {
+  unsigned long now = millis();
+  bool shouldLog = !initialized || ready != lastReady || (now - lastLog >= firebaseStatusLogInterval);
+  if (!shouldLog) {
     return;
   }
 
   initialized = true;
   lastReady = ready;
+  lastLog = now;
   Serial.printf("[firebase] status: %s\n", ready ? "ready" : "not ready");
 }
 
@@ -614,6 +677,11 @@ void tokenStatusCallback(TokenInfo info) {
   Serial.printf("[firebase] token: %s / %s\n",
                 getTokenType(info).c_str(),
                 getTokenStatus(info).c_str());
+  if (info.status == token_status_error) {
+    Serial.printf("[firebase] token error: %s (%d)\n",
+                  info.error.message.c_str(),
+                  info.error.code);
+  }
 }
 
 void initFirebase() {
@@ -632,6 +700,7 @@ void initFirebase() {
 // --- Setup e Handlers WebServer ---
 
 void setupWifi() {
+  WiFi.onEvent(onWiFiEvent);
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0));
   // IP padrão AP: 192.168.4.1
@@ -851,10 +920,13 @@ void setup() {
   setupWifi();
   initFirebase();
   setupServer();
+  logWifiStatusChange();
+  logFirebaseStatusChange();
 }
 
 void loop() {
   ensureStaWifi();
+  ensureTimeSynced();
   processPendingLogs();
   checkSchedules();
   processPumpQueue();
