@@ -1,0 +1,92 @@
+<ion-header>
+  <ion-toolbar class="app-toolbar">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/configuracao"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Calibracao</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="calibracao-page">
+  <section class="page-hero">
+    <div>
+      <h1>Calibrar dosagem</h1>
+      <p>Faça um teste, meca o volume e ajuste o coeficiente.</p>
+    </div>
+  </section>
+
+  <ion-note class="error-note" *ngIf="errorMessage">{{ errorMessage }}</ion-note>
+
+  <ion-card>
+    <ion-card-header>
+      <ion-card-title>Calibracao guiada</ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      <ion-item>
+        <ion-label position="stacked">Bomba</ion-label>
+        <ion-select [(ngModel)]="selectedBombId">
+          <ion-select-option *ngFor="let bomb of bombs" [value]="bomb.id">
+            {{ bomb.name || ('Bomba ' + bomb.id) }}
+          </ion-select-option>
+        </ion-select>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Dose de teste (ml)</ion-label>
+        <ion-input type="number" min="0.5" max="15" step="0.5" [(ngModel)]="testDoseMl"></ion-input>
+      </ion-item>
+
+      <ion-note class="coef-note" *ngIf="selectedBomb">
+        Coeficiente atual: {{ selectedBomb.calibrCoef }}
+      </ion-note>
+
+      <ion-button expand="block" (click)="startCalibration()" [disabled]="pendingCalibration || !bombs.length">
+        Iniciar dosagem
+      </ion-button>
+    </ion-card-content>
+  </ion-card>
+
+  <ion-card>
+    <ion-card-header>
+      <ion-card-title>Teste rapido</ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      <ion-item>
+        <ion-label position="stacked">Bomba</ion-label>
+        <ion-select [(ngModel)]="quickTestBombId">
+          <ion-select-option *ngFor="let bomb of bombs" [value]="bomb.id">
+            {{ bomb.name || ('Bomba ' + bomb.id) }}
+          </ion-select-option>
+        </ion-select>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Dosagem (ml)</ion-label>
+        <ion-select [(ngModel)]="quickTestDose">
+          <ion-select-option *ngFor="let dose of quickDoseOptions" [value]="dose">
+            {{ dose }} ml
+          </ion-select-option>
+        </ion-select>
+      </ion-item>
+
+      <ion-button expand="block" fill="outline" (click)="runQuickTest()" [disabled]="!bombs.length">
+        Acionar
+      </ion-button>
+    </ion-card-content>
+  </ion-card>
+
+  <ion-alert
+    [isOpen]="showDosePrompt"
+    header="Quantidade dosada"
+    message="Digite o volume real medido (ml)."
+    [inputs]="alertInputs"
+    [buttons]="alertButtons"
+  ></ion-alert>
+
+  <ion-toast
+    [isOpen]="toastOpen"
+    [message]="toastMessage"
+    duration="2000"
+    (didDismiss)="toastOpen = false"
+  ></ion-toast>
+</ion-content>

@@ -1,20 +1,56 @@
-<ion-header [translucent]="true">
-  <ion-toolbar>
-    <ion-title>
-      Blank
-    </ion-title>
+<ion-header>
+  <ion-toolbar class="app-toolbar">
+    <ion-title>AquaBalance Pro</ion-title>
   </ion-toolbar>
 </ion-header>
 
-<ion-content [fullscreen]="true">
-  <ion-header collapse="condense">
-    <ion-toolbar>
-      <ion-title size="large">Blank</ion-title>
-    </ion-toolbar>
-  </ion-header>
+<ion-content class="home-page">
+  <section class="hero">
+    <div>
+      <h1>Rede AquaBalancePro</h1>
+      <p>Conecte o celular ao Wi-Fi do ESP32 para configurar as bombas.</p>
+    </div>
+    <ion-button expand="block" (click)="refreshStatus()" [disabled]="isLoading">
+      <ion-spinner *ngIf="isLoading" name="dots"></ion-spinner>
+      <span *ngIf="!isLoading">Atualizar status</span>
+    </ion-button>
+  </section>
 
-  <div id="container">
-    <strong>Ready to create an app?</strong>
-    <p>Start with Ionic <a target="_blank" rel="noopener noreferrer" href="https://ionicframework.com/docs/components">UI Components</a></p>
-  </div>
+  <ion-list>
+    <ion-item button detail class="device-item" (click)="openConfig()">
+      <ion-label>
+        <h2>{{ deviceName }}</h2>
+        <p>Hora do dispositivo: {{ status?.time || 'aguardando atualizacao' }}</p>
+        <p *ngIf="status?.apIp">AP: {{ status?.apIp }}</p>
+      </ion-label>
+      <div class="status-stack">
+        <ion-chip [color]="status?.wifiConnected ? 'success' : 'danger'">
+          <ion-icon name="wifi"></ion-icon>
+          <ion-label>Wi-Fi</ion-label>
+        </ion-chip>
+        <ion-chip [color]="status?.firebaseReady ? 'success' : 'danger'">
+          <ion-icon name="cloud"></ion-icon>
+          <ion-label>Firebase</ion-label>
+        </ion-chip>
+      </div>
+    </ion-item>
+  </ion-list>
+
+  <ion-card class="info-card">
+    <ion-card-content>
+      <h3>Passo a passo</h3>
+      <ol>
+        <li>Conecte o celular ao Wi-Fi do ESP32.</li>
+        <li>Toque em "Atualizar status".</li>
+        <li>Abra o dispositivo para configurar as bombas.</li>
+      </ol>
+    </ion-card-content>
+  </ion-card>
+
+  <ion-toast
+    [isOpen]="toastOpen"
+    [message]="toastMessage"
+    duration="2200"
+    (didDismiss)="toastOpen = false"
+  ></ion-toast>
 </ion-content>

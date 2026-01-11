@@ -1,0 +1,108 @@
+<ion-header>
+  <ion-toolbar class="app-toolbar">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/home"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Configuracao</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="config-page">
+  <section class="page-hero">
+    <div>
+      <h1>Agenda das bombas</h1>
+      <p>Edite horarios, dosagem e dias da semana.</p>
+    </div>
+    <ion-button fill="outline" size="small" (click)="loadConfig()" [disabled]="loading">
+      Atualizar
+    </ion-button>
+  </section>
+
+  <ion-note class="error-note" *ngIf="errorMessage">{{ errorMessage }}</ion-note>
+
+  <ion-accordion-group class="config-accordion" *ngIf="bombs.length">
+    <ion-accordion *ngFor="let bomb of bombs" [value]="'bomb-' + bomb.id">
+      <ion-item slot="header" class="config-header">
+        <ion-label>
+          <h2>{{ bomb.name || ('Bomba ' + bomb.id) }}</h2>
+          <p>Ativos: {{ activeCount(bomb) }}/3</p>
+        </ion-label>
+      </ion-item>
+
+      <div class="config-body" slot="content">
+        <ion-item>
+          <ion-label position="stacked">Nome da bomba</ion-label>
+          <ion-input [(ngModel)]="bomb.name" placeholder="Nome opcional"></ion-input>
+        </ion-item>
+
+        <ion-segment [(ngModel)]="bomb.activeScheduleIndex">
+          <ion-segment-button
+            *ngFor="let schedule of bomb.schedules; let i = index"
+            [value]="i"
+          >
+            Horario {{ i + 1 }}
+          </ion-segment-button>
+        </ion-segment>
+
+        <div *ngIf="bomb.schedules[bomb.activeScheduleIndex] as schedule">
+          <ion-item>
+            <ion-label position="stacked">Horario de acionamento</ion-label>
+            <ion-input type="time" [(ngModel)]="schedule.timeValue"></ion-input>
+          </ion-item>
+
+          <ion-item class="range-item">
+            <ion-label position="stacked">Dosagem (ml)</ion-label>
+            <ion-range
+              min="0.5"
+              max="15"
+              step="0.5"
+              [(ngModel)]="schedule.dosagem"
+              aria-label="Dosagem"
+            ></ion-range>
+            <ion-input
+              type="number"
+              min="0.5"
+              max="15"
+              step="0.5"
+              [(ngModel)]="schedule.dosagem"
+            ></ion-input>
+          </ion-item>
+
+          <ion-item>
+            <ion-label>Ativar horario</ion-label>
+            <ion-toggle slot="end" [(ngModel)]="schedule.status"></ion-toggle>
+          </ion-item>
+
+          <div class="day-grid">
+            <ion-label class="day-label">Dias da semana</ion-label>
+            <div class="day-chips">
+              <ion-chip
+                *ngFor="let day of days; let i = index"
+                [class.selected]="schedule.diasSemana[i]"
+                (click)="toggleDay(schedule, i)"
+              >
+                <ion-label>{{ day }}</ion-label>
+              </ion-chip>
+            </div>
+          </div>
+        </div>
+      </div>
+    </ion-accordion>
+  </ion-accordion-group>
+
+  <div class="actions">
+    <ion-button expand="block" (click)="saveConfig()" [disabled]="saving || !bombs.length">
+      Salvar configuracoes
+    </ion-button>
+    <ion-button expand="block" fill="outline" (click)="goToCalibracao()">
+      Teste/Calibracao
+    </ion-button>
+  </div>
+
+  <ion-toast
+    [isOpen]="toastOpen"
+    [message]="toastMessage"
+    duration="2000"
+    (didDismiss)="toastOpen = false"
+  ></ion-toast>
+</ion-content>
