@@ -85,16 +85,10 @@ export class ConfiguracaoPage {
     this.errorMessage = '';
     try {
       const bombs = await firstValueFrom(this.doser.getConfig());
-      this.bombs = bombs.map((bomb) => ({
-        ...bomb,
-        activeScheduleIndex: 0,
-        schedules: bomb.schedules.map((schedule) => ({
-          ...schedule,
-          timeValue: this.formatTime(schedule.hour, schedule.minute),
-        })),
-      }));
+      this.bombs = bombs.map((bomb) => this.toFormBomb(bomb));
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : 'Falha ao carregar configuracoes.';
+      this.bombs = this.createFallbackBombs();
     } finally {
       this.loading = false;
     }
@@ -106,6 +100,10 @@ export class ConfiguracaoPage {
 
   activeCount(bomb: BombForm): number {
     return bomb.schedules.filter((schedule) => schedule.status).length;
+  }
+
+  isBombOn(bomb: BombForm): boolean {
+    return this.activeCount(bomb) > 0;
   }
 
   async saveConfig(): Promise<void> {
@@ -175,5 +173,35 @@ export class ConfiguracaoPage {
     const safeHour = Number.isFinite(hour) ? hour : 0;
     const safeMinute = Number.isFinite(minute) ? minute : 0;
     return `${String(safeHour).padStart(2, '0')}:${String(safeMinute).padStart(2, '0')}`;
+  }
+
+  private toFormBomb(bomb: BombConfig): BombForm {
+    return {
+      ...bomb,
+      activeScheduleIndex: 0,
+      schedules: bomb.schedules.map((schedule) => ({
+        ...schedule,
+        timeValue: this.formatTime(schedule.hour, schedule.minute),
+      })),
+    };
+  }
+
+  private createFallbackBombs(): BombForm[] {
+    return [1, 2, 3].map((id) =>
+      this.toFormBomb({
+        id,
+        name: `Bomba ${id}`,
+        calibrCoef: 1,
+        quantidadeEstoque: 0,
+        schedules: Array.from({ length: 3 }, (_, index) => ({
+          id: index + 1,
+          hour: 0,
+          minute: 0,
+          dosagem: 0.5,
+          status: false,
+          diasSemana: Array.from({ length: 7 }, () => false),
+        })),
+      }),
+    );
   }
 }

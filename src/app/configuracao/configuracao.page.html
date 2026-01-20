@@ -24,15 +24,28 @@
     <ion-accordion *ngFor="let bomb of bombs" [value]="'bomb-' + bomb.id">
       <ion-item slot="header" class="config-header">
         <ion-label>
-          <h2>{{ bomb.name || ('Bomba ' + bomb.id) }}</h2>
-          <p>Ativos: {{ activeCount(bomb) }}/3</p>
+          <div class="bomb-header">
+            <div class="bomb-header-left">
+              <ion-chip class="bomb-chip" [class]="'bomb-chip bomb-chip-' + bomb.id">
+                <ion-label>{{ bomb.name || ('Bomba ' + bomb.id) }}</ion-label>
+              </ion-chip>
+            </div>
+            <div class="bomb-header-right">
+              <ion-chip class="status-chip" [class.on]="isBombOn(bomb)" [class.off]="!isBombOn(bomb)">
+                <ion-label>{{ isBombOn(bomb) ? 'Ligada' : 'Desligada' }}</ion-label>
+              </ion-chip>
+              <ion-chip class="count-chip">
+                <ion-label>Ativo {{ activeCount(bomb) }}/3</ion-label>
+              </ion-chip>
+            </div>
+          </div>
         </ion-label>
       </ion-item>
 
       <div class="config-body" slot="content">
         <ion-item>
           <ion-label position="stacked">Nome da bomba</ion-label>
-          <ion-input [(ngModel)]="bomb.name" placeholder="Nome opcional"></ion-input>
+          <ion-input [(ngModel)]="bomb.name" placeholder="Nome opcional" maxlength="15"></ion-input>
         </ion-item>
 
         <ion-segment [(ngModel)]="bomb.activeScheduleIndex">

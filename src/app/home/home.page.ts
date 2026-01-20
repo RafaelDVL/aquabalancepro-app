@@ -78,4 +78,8 @@ export class HomePage {
       this.toastOpen = true;
     }
   }
+
+  openConfigPreview(): void {
+    void this.router.navigateByUrl('/configuracao');
+  }
 }
