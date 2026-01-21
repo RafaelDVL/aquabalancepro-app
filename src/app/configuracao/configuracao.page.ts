@@ -136,7 +136,8 @@ export class ConfiguracaoPage {
   private findDuplicateTimes(): string {
     for (const bomb of this.bombs) {
       const seen = new Set<string>();
-      for (const schedule of bomb.schedules) {
+      const activeSchedules = bomb.schedules.filter((schedule) => schedule.status);
+      for (const schedule of activeSchedules) {
         const key = schedule.timeValue || '00:00';
         if (seen.has(key)) {
           return `Horario duplicado na ${bomb.name || `Bomba ${bomb.id}`}.`;

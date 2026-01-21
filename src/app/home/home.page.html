@@ -2,6 +2,22 @@
   <ion-toolbar class="app-toolbar">
     <ion-title>AquaBalance Pro</ion-title>
   </ion-toolbar>
+  <ion-toolbar class="device-toolbar">
+    <div class="device-inline">
+      <span class="device-name">{{ deviceName }}</span>
+      <span class="device-time">Horário: {{ status?.time || 'aguardando atualizacao' }}</span>
+      <span class="device-ap" *ngIf="status?.apIp">AP: {{ status?.apIp }}</span>
+      <div class="status-inline">
+        <ion-chip [color]="status?.wifiConnected ? 'success' : 'danger'">
+          <ion-icon name="wifi"></ion-icon>
+          <ion-label>Wi-Fi</ion-label>
+        </ion-chip>
+        <ion-chip [color]="status?.firebaseReady ? 'success' : 'danger'">
+          <ion-icon name="cloud"></ion-icon>
+        </ion-chip>
+      </div>
+    </div>
+  </ion-toolbar>
 </ion-header>
 
 <ion-content class="home-page">
@@ -14,30 +30,13 @@
       <ion-spinner *ngIf="isLoading" name="dots"></ion-spinner>
       <span *ngIf="!isLoading">Atualizar status</span>
     </ion-button>
+    <ion-button *ngIf="canConfigure" expand="block" (click)="openConfig()">
+      Configurar {{ deviceName }}
+    </ion-button>
     <ion-button expand="block" fill="outline" (click)="openConfigPreview()">
       Ver layout da configuracao
     </ion-button>
   </section>
-
-  <ion-list>
-    <ion-item button detail class="device-item" (click)="openConfig()">
-      <ion-label>
-        <h2>{{ deviceName }}</h2>
-        <p>Hora do dispositivo: {{ status?.time || 'aguardando atualizacao' }}</p>
-        <p *ngIf="status?.apIp">AP: {{ status?.apIp }}</p>
-      </ion-label>
-      <div class="status-stack">
-        <ion-chip [color]="status?.wifiConnected ? 'success' : 'danger'">
-          <ion-icon name="wifi"></ion-icon>
-          <ion-label>Wi-Fi</ion-label>
-        </ion-chip>
-        <ion-chip [color]="status?.firebaseReady ? 'success' : 'danger'">
-          <ion-icon name="cloud"></ion-icon>
-          <ion-label>Firebase</ion-label>
-        </ion-chip>
-      </div>
-    </ion-item>
-  </ion-list>
 
   <ion-card class="info-card">
     <ion-card-content>

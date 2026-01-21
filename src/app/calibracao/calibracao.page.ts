@@ -56,7 +56,7 @@ import { BombConfig, DoserService } from '../services/doser.service';
 export class CalibracaoPage {
   bombs: BombConfig[] = [];
   selectedBombId = 1;
-  testDoseMl = 5;
+  readonly calibrationDoseMl = 1;
   quickTestBombId = 1;
   quickTestDose = 1;
   readonly quickDoseOptions = [1, 3, 5, 10, 15];
@@ -77,7 +77,7 @@ export class CalibracaoPage {
       },
     },
     {
-      text: 'Salvar',
+      text: 'Calibrar',
       handler: (data: { actualDose: string }) => this.applyCalibration(data.actualDose),
     },
   ];
@@ -106,12 +106,14 @@ export class CalibracaoPage {
   }
 
   async startCalibration(): Promise<void> {
-    if (!this.selectedBomb || this.testDoseMl <= 0) {
+    if (!this.selectedBomb) {
       return;
     }
     this.pendingCalibration = true;
     try {
-      await firstValueFrom(this.doser.testDose(this.selectedBombId, this.testDoseMl));
+      await firstValueFrom(
+        this.doser.testDose(this.selectedBombId, this.calibrationDoseMl, 'Calibracao'),
+      );
       this.showDosePrompt = true;
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : 'Falha ao testar a bomba.';
@@ -127,7 +129,7 @@ export class CalibracaoPage {
       return;
     }
 
-    const ratio = this.testDoseMl / measured;
+    const ratio = this.calibrationDoseMl / measured;
     const updated = {
       ...this.selectedBomb,
       calibrCoef: Number((this.selectedBomb.calibrCoef * ratio).toFixed(3)),
@@ -137,7 +139,7 @@ export class CalibracaoPage {
 
     try {
       await firstValueFrom(this.doser.saveConfig(this.bombs));
-      this.toastMessage = 'Coeficiente atualizado com sucesso.';
+      this.toastMessage = `Calibrado com ${measured} ml.`;
       this.toastOpen = true;
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : 'Falha ao salvar calibracao.';
@@ -151,7 +153,9 @@ export class CalibracaoPage {
       return;
     }
     try {
-      await firstValueFrom(this.doser.testDose(this.quickTestBombId, this.quickTestDose));
+      await firstValueFrom(
+        this.doser.testDose(this.quickTestBombId, this.quickTestDose, 'Teste rapido'),
+      );
       this.toastMessage = 'Teste enviado para a bomba.';
       this.toastOpen = true;
     } catch (error) {

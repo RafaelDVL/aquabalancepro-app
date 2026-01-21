@@ -6,6 +6,59 @@
   --background: linear-gradient(160deg, #eef9fb 0%, #e3f1f5 55%, #f9feff 100%);
 }
 
+.device-toolbar {
+  --background: transparent;
+  --border-color: transparent;
+  --padding-start: 0;
+  --padding-end: 0;
+  --min-height: 44px;
+}
+
+.device-inline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px var(--page-padding) 10px;
+  font-size: 12px;
+  color: var(--abp-muted);
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.device-inline > * {
+  flex: 0 0 auto;
+}
+
+.device-name {
+  font-weight: 600;
+  color: var(--ion-text-color, #1b2b2a);
+}
+
+.device-time {
+  font-size: 12px;
+}
+
+.device-ap {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.status-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-inline ion-chip {
+  margin: 0;
+  height: 24px;
+  font-size: 11px;
+}
+
+.status-inline ion-icon {
+  font-size: 16px;
+}
+
 .hero {
   padding: var(--page-padding);
   display: grid;
@@ -21,20 +74,6 @@
 .hero p {
   margin: 0;
   color: var(--abp-muted);
-}
-
-.device-item {
-  margin: 0 var(--page-padding) 12px;
-  border-radius: 18px;
-  --background: var(--abp-surface);
-  box-shadow: 0 16px 28px rgba(15, 28, 27, 0.08);
-}
-
-.status-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: flex-end;
 }
 
 .info-card {

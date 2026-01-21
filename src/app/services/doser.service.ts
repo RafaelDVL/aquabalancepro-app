@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, map } from 'rxjs';
 
@@ -66,6 +66,9 @@ type RawConfig = Record<string, RawBomb>;
 export class DoserService {
   private readonly apiUrl = 'http://192.168.4.1';
   private readonly scheduleCount = 3;
+  private readonly plainJsonHeaders = new HttpHeaders({
+    'Content-Type': 'text/plain',
+  });
 
   constructor(private readonly http: HttpClient) {}
 
@@ -91,20 +94,27 @@ export class DoserService {
 
   saveConfig(bombs: BombConfig[]): Observable<ApiStatusResponse> {
     const payload = this.buildConfigPayload(bombs);
-    return this.http.post<ApiStatusResponse>(`${this.apiUrl}/config`, payload);
+    return this.http.post<ApiStatusResponse>(
+      `${this.apiUrl}/config`,
+      JSON.stringify(payload),
+      { headers: this.plainJsonHeaders },
+    );
   }
 
   setTime(date: Date): Observable<ApiStatusResponse> {
-    return this.http.post<ApiStatusResponse>(`${this.apiUrl}/time`, {
-      time: this.formatDateTime(date),
-    });
+    return this.http.post<ApiStatusResponse>(
+      `${this.apiUrl}/time`,
+      JSON.stringify({ time: this.formatDateTime(date) }),
+      { headers: this.plainJsonHeaders },
+    );
   }
 
-  testDose(bombId: number, dosagem: number): Observable<ApiStatusResponse> {
-    return this.http.post<ApiStatusResponse>(`${this.apiUrl}/dose`, {
-      bomb: bombId,
-      dosagem,
-    });
+  testDose(bombId: number, dosagem: number, origem?: string): Observable<ApiStatusResponse> {
+    return this.http.post<ApiStatusResponse>(
+      `${this.apiUrl}/dose`,
+      JSON.stringify({ bomb: bombId, dosagem, origem }),
+      { headers: this.plainJsonHeaders },
+    );
   }
 
   private mapBombs(raw: RawConfig): BombConfig[] {

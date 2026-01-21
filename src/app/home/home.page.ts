@@ -46,6 +46,7 @@ export class HomePage {
   status?: DeviceStatus;
   deviceName = 'AquaBalancePro';
   isLoading = false;
+  canConfigure = false;
   toastMessage = '';
   toastOpen = false;
 
@@ -57,8 +58,13 @@ export class HomePage {
 
   async refreshStatus(): Promise<void> {
     this.isLoading = true;
+    this.canConfigure = false;
     try {
       this.status = await firstValueFrom(this.doser.getStatus());
+      if (this.status?.apSsid) {
+        this.deviceName = this.status.apSsid;
+      }
+      this.canConfigure = true;
     } catch (error) {
       this.toastMessage =
         error instanceof Error ? error.message : 'Falha ao consultar o dispositivo.';
@@ -71,11 +77,12 @@ export class HomePage {
   async openConfig(): Promise<void> {
     try {
       await firstValueFrom(this.doser.setTime(new Date()));
-      await this.router.navigateByUrl('/configuracao');
     } catch (error) {
       this.toastMessage =
         error instanceof Error ? error.message : 'Falha ao sincronizar o horario.';
       this.toastOpen = true;
+    } finally {
+      await this.router.navigateByUrl('/configuracao');
     }
   }
 
