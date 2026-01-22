@@ -34,6 +34,13 @@ export interface ApiStatusResponse {
   message?: string;
 }
 
+export interface LogEntry {
+  timestamp: string;
+  bomba: string;
+  dosagem: number;
+  origem: string;
+}
+
 interface RawStatus {
   time?: string;
   wifi?: { connected?: boolean; rssi?: number; ip?: string };
@@ -115,6 +122,24 @@ export class DoserService {
       JSON.stringify({ bomb: bombId, dosagem, origem }),
       { headers: this.plainJsonHeaders },
     );
+  }
+
+  getLogs(): Observable<LogEntry[]> {
+    return this.http.get<LogEntry[] | { logs?: LogEntry[] }>(`${this.apiUrl}/logs`).pipe(
+      map((response) => {
+        if (Array.isArray(response)) {
+          return response;
+        }
+        if (response && Array.isArray(response.logs)) {
+          return response.logs;
+        }
+        return [];
+      }),
+    );
+  }
+
+  clearLogs(): Observable<ApiStatusResponse> {
+    return this.http.delete<ApiStatusResponse>(`${this.apiUrl}/logs`);
   }
 
   private mapBombs(raw: RawConfig): BombConfig[] {

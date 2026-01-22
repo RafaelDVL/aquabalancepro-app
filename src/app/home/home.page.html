@@ -33,6 +33,9 @@
     <ion-button *ngIf="canConfigure" expand="block" (click)="openConfig()">
       Configurar {{ deviceName }}
     </ion-button>
+    <ion-button *ngIf="canConfigure" expand="block" fill="outline" (click)="openLogs()">
+      Log de registros
+    </ion-button>
     <ion-button expand="block" fill="outline" (click)="openConfigPreview()">
       Ver layout da configuracao
     </ion-button>

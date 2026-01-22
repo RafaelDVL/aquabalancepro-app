@@ -16,6 +16,10 @@ export const routes: Routes = [
       import('./calibracao/calibracao.page').then((m) => m.CalibracaoPage),
   },
   {
+    path: 'logs',
+    loadComponent: () => import('./logs/logs.page').then((m) => m.LogsPage),
+  },
+  {
     path: '',
     redirectTo: 'home',
     pathMatch: 'full',

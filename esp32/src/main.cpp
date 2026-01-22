@@ -3,6 +3,8 @@
 #include <RTClib.h>
 #include <WiFi.h>
 #include <Preferences.h>
+#include <FS.h>
+#include <LittleFS.h>
 #include <Firebase_ESP_Client.h>
 #include <ArduinoJson.h>
 #include <AsyncTCP.h>
@@ -24,6 +26,9 @@
 #define MAX_PENDING_LOGS 10
 #define LOG_INTERVAL 500
 #define CONFIG_DOC_SIZE 8192
+#define LOG_LIMIT 300
+#define LOG_FILE "/logs.jsonl"
+#define LOG_TEMP_FILE "/logs.tmp"
 
 // --- Wi-Fi ---
 const char *AP_SSID = "AquaBalancePro";
@@ -137,7 +142,9 @@ portMUX_TYPE pumpQueueMux = portMUX_INITIALIZER_UNLOCKED;
 
 bool rtcReady = false;
 bool prefsReady = false;
+bool fsReady = false;
 bool systemReady = false;
+size_t logCount = 0;
 
 enum LedMode
 {
@@ -187,6 +194,8 @@ void handleGetConfig(AsyncWebServerRequest *request);
 void handlePostConfig(AsyncWebServerRequest *request);
 void handlePostTime(AsyncWebServerRequest *request);
 void handlePostDose(AsyncWebServerRequest *request);
+void handleGetLogs(AsyncWebServerRequest *request);
+void handleDeleteLogs(AsyncWebServerRequest *request);
 void storeRequestBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
 bool readRequestBody(AsyncWebServerRequest *request, String &body);
 
@@ -200,6 +209,12 @@ bool applyConfigJson(const String &json);
 void parseBombData(int i, JsonObject bomba);
 bool parseDateTime(const String &value, DateTime &output);
 void resetSchedule(Schedule &schedule);
+
+// Logs locais
+bool initLogStorage();
+size_t countLogLines(File &file);
+bool trimLogFile(size_t removeCount);
+void appendLocalLog(int bombaIndex, float dosagem, const String &origem, const DateTime &timestamp);
 
 // Scheduler
 void checkSchedules();
@@ -690,6 +705,63 @@ void handlePostDose(AsyncWebServerRequest *request)
   request->send(200, "application/json", "{\"ok\":true}");
 }
 
+void handleGetLogs(AsyncWebServerRequest *request)
+{
+  Serial.println("[http] Recebido: GET /logs");
+  if (!fsReady)
+  {
+    request->send(503, "application/json", "{\"ok\":false,\"message\":\"filesystem indisponivel\"}");
+    return;
+  }
+
+  if (!LittleFS.exists(LOG_FILE))
+  {
+    request->send(200, "application/json", "[]");
+    return;
+  }
+
+  File file = LittleFS.open(LOG_FILE, FILE_READ);
+  if (!file)
+  {
+    request->send(500, "application/json", "{\"ok\":false,\"message\":\"falha ao abrir logs\"}");
+    return;
+  }
+
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  response->print("[");
+  bool first = true;
+
+  while (file.available())
+  {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    if (line.isEmpty()) continue;
+    if (!first) response->print(",");
+    response->print(line);
+    first = false;
+  }
+
+  response->print("]");
+  file.close();
+  request->send(response);
+}
+
+void handleDeleteLogs(AsyncWebServerRequest *request)
+{
+  Serial.println("[http] Recebido: DELETE /logs");
+  if (!fsReady)
+  {
+    request->send(503, "application/json", "{\"ok\":false,\"message\":\"filesystem indisponivel\"}");
+    return;
+  }
+
+  if (LittleFS.exists(LOG_FILE))
+    LittleFS.remove(LOG_FILE);
+
+  logCount = 0;
+  request->send(200, "application/json", "{\"ok\":true}");
+}
+
 void setupServer()
 {
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
@@ -706,6 +778,8 @@ void setupServer()
   server.on("/config", HTTP_POST, handlePostConfig, nullptr, storeRequestBody);
   server.on("/time", HTTP_POST, handlePostTime, nullptr, storeRequestBody);
   server.on("/dose", HTTP_POST, handlePostDose, nullptr, storeRequestBody);
+  server.on("/logs", HTTP_GET, handleGetLogs);
+  server.on("/logs", HTTP_DELETE, handleDeleteLogs);
 
   server.onNotFound([](AsyncWebServerRequest *request) {
     Serial.printf("[http] 404/Options: %s %s\n",
@@ -758,6 +832,148 @@ void storeRequestBody(AsyncWebServerRequest *request, uint8_t *data, size_t len,
   {
     static_cast<char *>(request->_tempObject)[total] = '\0';
   }
+}
+
+// =========================================================
+// Logs locais (LittleFS)
+// =========================================================
+size_t countLogLines(File &file)
+{
+  size_t count = 0;
+  while (file.available())
+  {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    if (!line.isEmpty()) count++;
+  }
+  return count;
+}
+
+bool trimLogFile(size_t removeCount)
+{
+  if (removeCount == 0) return true;
+  if (!LittleFS.exists(LOG_FILE)) return true;
+
+  File input = LittleFS.open(LOG_FILE, FILE_READ);
+  if (!input)
+  {
+    Serial.println("[log] ERRO: Falha ao abrir arquivo de logs para trim");
+    return false;
+  }
+
+  File output = LittleFS.open(LOG_TEMP_FILE, FILE_WRITE);
+  if (!output)
+  {
+    Serial.println("[log] ERRO: Falha ao criar arquivo temporario de logs");
+    input.close();
+    return false;
+  }
+
+  size_t skipped = 0;
+  while (input.available())
+  {
+    String line = input.readStringUntil('\n');
+    line.trim();
+    if (line.isEmpty()) continue;
+    if (skipped < removeCount)
+    {
+      skipped++;
+      continue;
+    }
+    output.println(line);
+  }
+
+  input.close();
+  output.close();
+
+  LittleFS.remove(LOG_FILE);
+  if (!LittleFS.rename(LOG_TEMP_FILE, LOG_FILE))
+  {
+    Serial.println("[log] ERRO: Falha ao substituir arquivo de logs");
+    return false;
+  }
+
+  return true;
+}
+
+bool initLogStorage()
+{
+  fsReady = LittleFS.begin(true);
+  if (!fsReady)
+  {
+    Serial.println("[log] ERRO: Falha ao iniciar LittleFS");
+    return false;
+  }
+
+  if (!LittleFS.exists(LOG_FILE))
+  {
+    File file = LittleFS.open(LOG_FILE, FILE_WRITE);
+    if (!file)
+    {
+      Serial.println("[log] ERRO: Falha ao criar arquivo de logs");
+      return false;
+    }
+    file.close();
+    logCount = 0;
+    return true;
+  }
+
+  File file = LittleFS.open(LOG_FILE, FILE_READ);
+  if (!file)
+  {
+    Serial.println("[log] ERRO: Falha ao abrir arquivo de logs");
+    return false;
+  }
+
+  logCount = countLogLines(file);
+  file.close();
+
+  if (logCount > LOG_LIMIT)
+  {
+    size_t removeCount = logCount - LOG_LIMIT;
+    if (trimLogFile(removeCount))
+      logCount = LOG_LIMIT;
+  }
+
+  Serial.printf("[log] Logs carregados: %u\n", static_cast<unsigned int>(logCount));
+  return true;
+}
+
+void appendLocalLog(int bombaIndex, float dosagem, const String &origem, const DateTime &timestamp)
+{
+  if (!fsReady) return;
+  if (bombaIndex < 0 || bombaIndex >= 3) return;
+  if (dosagem <= 0) return;
+
+  if (logCount >= LOG_LIMIT)
+  {
+    size_t removeCount = (logCount - LOG_LIMIT) + 1;
+    if (!trimLogFile(removeCount))
+    {
+      Serial.println("[log] ERRO: Falha ao limpar logs antigos");
+      return;
+    }
+    logCount = (logCount > removeCount) ? (logCount - removeCount) : 0;
+  }
+
+  File file = LittleFS.open(LOG_FILE, FILE_APPEND);
+  if (!file)
+  {
+    Serial.println("[log] ERRO: Falha ao abrir arquivo de logs para escrita");
+    return;
+  }
+
+  StaticJsonDocument<256> doc;
+  doc["timestamp"] = formatTimestamp(timestamp);
+  doc["bomba"] = bombas[bombaIndex].name;
+  doc["dosagem"] = dosagem;
+  doc["origem"] = origem;
+
+  serializeJson(doc, file);
+  file.println();
+  file.close();
+
+  logCount++;
 }
 
 // =========================================================
@@ -1118,6 +1334,7 @@ void finishPumpJob()
 
   saveBombasConfig();
   enqueuePendingLog(bombaIndex, activeJob.dosagem, activeJob.origem, activeJob.timestamp);
+  appendLocalLog(bombaIndex, activeJob.dosagem, activeJob.origem, activeJob.timestamp);
 }
 
 void startNextPumpJob()
@@ -1292,6 +1509,8 @@ void setup()
     loadBombasConfig();
   else
     Serial.println("[config] ERRO: Falha ao iniciar Preferences.");
+
+  initLogStorage();
 
   systemReady = rtcReady && prefsReady;
 

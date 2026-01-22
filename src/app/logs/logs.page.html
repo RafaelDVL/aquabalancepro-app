@@ -1,0 +1,64 @@
+<ion-header>
+  <ion-toolbar class="app-toolbar">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/home"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Logs</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="logs-page">
+  <section class="page-hero">
+    <div>
+      <h1>Log de registros</h1>
+      <p>Mais recentes no topo.</p>
+    </div>
+    <ion-button fill="outline" size="small" (click)="loadLogs()" [disabled]="loading">
+      Atualizar
+    </ion-button>
+  </section>
+
+  <ion-note class="error-note" *ngIf="errorMessage">{{ errorMessage }}</ion-note>
+
+  <div class="empty-state" *ngIf="!loading && !logs.length && !errorMessage">
+    <h2>Nenhum registro ainda.</h2>
+    <p>Assim que uma dosagem ocorrer, ela aparece aqui.</p>
+  </div>
+
+  <ion-list class="log-list" *ngIf="logs.length">
+    <ion-item *ngFor="let log of logs">
+      <ion-label>
+        <h2>{{ log.bomba }}</h2>
+        <p>{{ log.timestamp }}</p>
+      </ion-label>
+      <ion-note slot="end">{{ log.dosagem | number: '1.0-2' }} ml</ion-note>
+      <ion-chip slot="end" [class.programado]="isProgramado(log)" [class.manual]="!isProgramado(log)">
+        <ion-label>{{ log.origem }}</ion-label>
+      </ion-chip>
+    </ion-item>
+  </ion-list>
+
+  <div class="loading" *ngIf="loading">
+    <ion-spinner name="dots"></ion-spinner>
+  </div>
+
+  <ion-toast
+    [isOpen]="toastOpen"
+    [message]="toastMessage"
+    duration="2000"
+    (didDismiss)="toastOpen = false"
+  ></ion-toast>
+</ion-content>
+
+<ion-footer>
+  <ion-toolbar class="footer-toolbar">
+    <ion-button
+      expand="block"
+      color="danger"
+      (click)="clearLogs()"
+      [disabled]="clearing || !logs.length"
+    >
+      Apagar todos Logs
+    </ion-button>
+  </ion-toolbar>
+</ion-footer>

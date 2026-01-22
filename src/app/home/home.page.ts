@@ -89,4 +89,8 @@ export class HomePage {
   openConfigPreview(): void {
     void this.router.navigateByUrl('/configuracao');
   }
+
+  openLogs(): void {
+    void this.router.navigateByUrl('/logs');
+  }
 }

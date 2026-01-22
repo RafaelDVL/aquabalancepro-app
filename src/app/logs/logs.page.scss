@@ -1,0 +1,97 @@
+:host {
+  --page-padding: 20px;
+}
+
+.logs-page {
+  --background: linear-gradient(180deg, #eef9fb 0%, #e3f1f5 55%, #f9feff 100%);
+}
+
+.page-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--page-padding) var(--page-padding) 12px;
+  gap: 12px;
+}
+
+.page-hero h1 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+
+.page-hero p {
+  margin: 0;
+  color: var(--abp-muted);
+}
+
+.error-note {
+  display: block;
+  margin: 0 var(--page-padding) 12px;
+  color: #b42318;
+}
+
+.empty-state {
+  margin: 12px var(--page-padding) 24px;
+  padding: 18px;
+  border-radius: 14px;
+  background: var(--abp-surface);
+  border: 1px solid var(--abp-line);
+  color: var(--abp-muted);
+}
+
+.empty-state h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  color: var(--abp-ink);
+}
+
+.log-list {
+  padding: 0 var(--page-padding) 16px;
+}
+
+.log-list ion-item {
+  --background: var(--abp-surface);
+  --color: var(--abp-ink);
+  --border-color: var(--abp-line);
+  --border-width: 1px;
+  --inner-border-width: 0;
+  margin-bottom: 10px;
+  border-radius: 14px;
+  box-shadow: 0 10px 20px rgba(15, 28, 27, 0.06);
+}
+
+.log-list ion-item::part(native) {
+  border-radius: 14px;
+}
+
+.log-list ion-note {
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+.log-list ion-chip {
+  --background: #d8e6ec;
+  --color: #4a6170;
+  margin-left: 8px;
+}
+
+.log-list ion-chip.programado {
+  --background: #15803d;
+  --color: #ffffff;
+}
+
+.log-list ion-chip.manual {
+  --background: #1e536e;
+  --color: #ffffff;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 24px;
+}
+
+.footer-toolbar {
+  padding: 4px var(--page-padding) 10px;
+}
