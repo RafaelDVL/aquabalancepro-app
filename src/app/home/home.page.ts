@@ -2,16 +2,9 @@ import { CommonModule } from '@angular/common';
 import { Component } from '@angular/core';
 import { Router } from '@angular/router';
 import {
-  IonButton,
-  IonCard,
-  IonCardContent,
-  IonChip,
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
   IonSpinner,
   IonTitle,
   IonToast,
@@ -23,19 +16,11 @@ import { DeviceStatus, DoserService } from '../services/doser.service';
 @Component({
   selector: 'app-home',
   templateUrl: 'home.page.html',
-  styleUrls: ['home.page.scss'],
   imports: [
     CommonModule,
-    IonButton,
-    IonCard,
-    IonCardContent,
-    IonChip,
     IonContent,
     IonHeader,
     IonIcon,
-    IonItem,
-    IonLabel,
-    IonList,
     IonSpinner,
     IonTitle,
     IonToast,

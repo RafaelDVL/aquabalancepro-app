@@ -1,45 +1,68 @@
 <ion-header>
-  <ion-toolbar class="app-toolbar">
+  <ion-toolbar class="bg-transparent text-neon-cyan" style="--background: transparent;">
     <ion-buttons slot="start">
-      <ion-back-button defaultHref="/home"></ion-back-button>
+      <ion-back-button defaultHref="/home" color="primary" class="text-neon-cyan"></ion-back-button>
     </ion-buttons>
-    <ion-title>Logs</ion-title>
+    <ion-title class="font-bold">Logs</ion-title>
   </ion-toolbar>
 </ion-header>
 
-<ion-content class="logs-page">
-  <section class="page-hero">
-    <div>
-      <h1>Log de registros</h1>
-      <p>Mais recentes no topo.</p>
+<ion-content class="bg-ocean-dark text-text-main" style="--background: #05161A;">
+  <section class="px-5 pt-6 pb-4">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h1 class="text-xl font-bold text-text-main">Log de registros</h1>
+        <p class="text-sm text-text-muted">Mais recentes no topo.</p>
+      </div>
+      <button
+        type="button"
+        class="border border-neon-cyan text-neon-cyan rounded-xl px-4 py-2 text-sm font-semibold transition hover:bg-neon-cyan/10 disabled:opacity-60 disabled:cursor-not-allowed"
+        (click)="loadLogs()"
+        [disabled]="loading"
+      >
+        Atualizar
+      </button>
     </div>
-    <ion-button fill="outline" size="small" (click)="loadLogs()" [disabled]="loading">
-      Atualizar
-    </ion-button>
   </section>
 
-  <ion-note class="error-note" *ngIf="errorMessage">{{ errorMessage }}</ion-note>
+  <p class="px-5 text-sm text-red-400" *ngIf="errorMessage">{{ errorMessage }}</p>
 
-  <div class="empty-state" *ngIf="!loading && !logs.length && !errorMessage">
-    <h2>Nenhum registro ainda.</h2>
-    <p>Assim que uma dosagem ocorrer, ela aparece aqui.</p>
+  <div class="px-5 pb-6" *ngIf="!loading && !logs.length && !errorMessage">
+    <div class="bg-ocean-card rounded-2xl shadow-lg border border-white/5 p-6">
+      <h2 class="text-base font-semibold text-text-main">Nenhum registro ainda.</h2>
+      <p class="text-sm text-text-muted mt-2">Assim que uma dosagem ocorrer, ela aparece aqui.</p>
+    </div>
   </div>
 
-  <ion-list class="log-list" *ngIf="logs.length">
-    <ion-item *ngFor="let log of logs">
-      <ion-label>
-        <h2>{{ log.bomba }}</h2>
-        <p>{{ log.timestamp }}</p>
-      </ion-label>
-      <ion-note slot="end">{{ log.dosagem | number: '1.0-2' }} ml</ion-note>
-      <ion-chip slot="end" [class.programado]="isProgramado(log)" [class.manual]="!isProgramado(log)">
-        <ion-label>{{ log.origem }}</ion-label>
-      </ion-chip>
-    </ion-item>
-  </ion-list>
+  <div class="px-5 pb-8 space-y-3" *ngIf="logs.length">
+    <div
+      *ngFor="let log of logs"
+      class="bg-ocean-card rounded-2xl shadow-lg border border-white/5 p-5"
+    >
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h2 class="text-base font-semibold text-text-main">{{ log.bomba }}</h2>
+          <p class="text-xs text-text-muted mt-1">{{ log.timestamp }}</p>
+        </div>
+        <div class="text-right">
+          <p class="text-sm font-semibold text-text-main">{{ log.dosagem | number: '1.0-2' }} ml</p>
+          <span
+            class="inline-block mt-2 rounded-full px-3 py-1 text-xs"
+            [class]="
+              isProgramado(log)
+                ? 'bg-neon-cyan text-ocean-dark font-bold shadow-neon'
+                : 'border border-ocean-light text-text-muted'
+            "
+          >
+            {{ log.origem }}
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
 
-  <div class="loading" *ngIf="loading">
-    <ion-spinner name="dots"></ion-spinner>
+  <div class="flex justify-center pb-10" *ngIf="loading">
+    <ion-spinner name="dots" class="text-neon-cyan"></ion-spinner>
   </div>
 
   <ion-toast
@@ -51,14 +74,16 @@
 </ion-content>
 
 <ion-footer>
-  <ion-toolbar class="footer-toolbar">
-    <ion-button
-      expand="block"
-      color="danger"
-      (click)="clearLogs()"
-      [disabled]="clearing || !logs.length"
-    >
-      Apagar todos Logs
-    </ion-button>
+  <ion-toolbar class="bg-ocean-dark/95" style="--background: rgba(5, 22, 26, 0.95);">
+    <div class="px-5 py-3">
+      <button
+        type="button"
+        class="w-full border border-red-400 text-red-400 rounded-xl py-3 disabled:opacity-60 disabled:cursor-not-allowed"
+        (click)="clearLogs()"
+        [disabled]="clearing || !logs.length"
+      >
+        Apagar todos Logs
+      </button>
+    </div>
   </ion-toolbar>
 </ion-footer>

@@ -3,30 +3,38 @@
 
 :root {
   --ion-font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
-  --ion-color-primary: #1e536e;
-  --ion-color-primary-rgb: 30, 83, 110;
-  --ion-color-primary-contrast: #ffffff;
-  --ion-color-primary-contrast-rgb: 255, 255, 255;
-  --ion-color-primary-shade: #1a495f;
-  --ion-color-primary-tint: #31667f;
+  --ion-color-primary: #0f969c;
+  --ion-color-primary-rgb: 15, 150, 156;
+  --ion-color-primary-contrast: #05161a;
+  --ion-color-primary-contrast-rgb: 5, 22, 26;
+  --ion-color-primary-shade: #0d858a;
+  --ion-color-primary-tint: #2aa2a7;
 
-  --ion-color-secondary: #18a3b7;
-  --ion-color-secondary-rgb: 24, 163, 183;
-  --ion-color-secondary-contrast: #0b2b33;
-  --ion-color-secondary-contrast-rgb: 11, 43, 51;
-  --ion-color-secondary-shade: #168fa1;
-  --ion-color-secondary-tint: #2bb1c3;
+  --ion-color-secondary: #0c7075;
+  --ion-color-secondary-rgb: 12, 112, 117;
+  --ion-color-secondary-contrast: #e0e0e0;
+  --ion-color-secondary-contrast-rgb: 224, 224, 224;
+  --ion-color-secondary-shade: #0b6367;
+  --ion-color-secondary-tint: #268087;
 
-  --ion-color-tertiary: #5aa5cd;
-  --ion-color-tertiary-rgb: 90, 165, 205;
-  --ion-color-tertiary-contrast: #0b2b33;
-  --ion-color-tertiary-contrast-rgb: 11, 43, 51;
-  --ion-color-tertiary-shade: #4f93b7;
-  --ion-color-tertiary-tint: #6ab0d5;
+  --ion-color-tertiary: #294d61;
+  --ion-color-tertiary-rgb: 41, 77, 97;
+  --ion-color-tertiary-contrast: #e0e0e0;
+  --ion-color-tertiary-contrast-rgb: 224, 224, 224;
+  --ion-color-tertiary-shade: #244456;
+  --ion-color-tertiary-tint: #3e5f73;
 
-  --abp-surface: #ffffff;
-  --abp-surface-alt: #e3f1f5;
-  --abp-ink: #0b1f2a;
-  --abp-muted: #45606b;
-  --abp-line: #c7dfe6;
+  --ion-background-color: #05161a;
+  --ion-background-color-rgb: 5, 22, 26;
+  --ion-text-color: #e0e0e0;
+  --ion-text-color-rgb: 224, 224, 224;
+  --ion-item-background: #072e33;
+  --ion-toolbar-background: #05161a;
+  --ion-toolbar-color: #0f969c;
+
+  --abp-surface: #072e33;
+  --abp-surface-alt: #294d61;
+  --abp-ink: #e0e0e0;
+  --abp-muted: #6da5c0;
+  --abp-line: #294d61;
 }

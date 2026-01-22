@@ -1,115 +1,272 @@
 <ion-header>
-  <ion-toolbar class="app-toolbar">
+  <ion-toolbar class="bg-transparent text-neon-cyan" style="--background: transparent;">
     <ion-buttons slot="start">
-      <ion-back-button defaultHref="/home"></ion-back-button>
+      <ion-back-button defaultHref="/home" color="primary" class="text-neon-cyan"></ion-back-button>
     </ion-buttons>
-    <ion-title>Configuracao</ion-title>
+    <ion-title class="font-bold">Configuracao</ion-title>
   </ion-toolbar>
 </ion-header>
 
-<ion-content class="config-page">
-  <section class="page-hero">
-    <div>
-      <h1>Agenda das bombas</h1>
-      <p>Edite horarios, dosagem e dias da semana.</p>
+<ion-content class="bg-ocean-dark text-text-main" style="--background: #05161A;">
+  <section class="px-5 pt-6 pb-4">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h1 class="text-xl font-bold text-text-main">Agenda das bombas</h1>
+        <p class="text-sm text-text-muted">Edite horarios, dosagem e dias da semana.</p>
+      </div>
+      <button
+        type="button"
+        class="border border-neon-cyan text-neon-cyan rounded-xl px-4 py-2 text-sm font-semibold transition hover:bg-neon-cyan/10 disabled:opacity-60 disabled:cursor-not-allowed"
+        (click)="loadConfig()"
+        [disabled]="loading"
+      >
+        Atualizar
+      </button>
     </div>
-    <ion-button fill="outline" size="small" (click)="loadConfig()" [disabled]="loading">
-      Atualizar
-    </ion-button>
   </section>
 
-  <ion-note class="error-note" *ngIf="errorMessage">{{ errorMessage }}</ion-note>
+  <p class="px-5 text-sm text-red-400" *ngIf="errorMessage">{{ errorMessage }}</p>
 
-  <ion-accordion-group class="config-accordion" *ngIf="bombs.length">
-    <ion-accordion *ngFor="let bomb of bombs" [value]="'bomb-' + bomb.id">
-      <ion-item slot="header" class="config-header">
-        <ion-label>
-          <div class="bomb-header">
-            <div class="bomb-header-left">
-              <ion-chip class="bomb-chip" [class]="'bomb-chip bomb-chip-' + bomb.id">
-                <ion-label>{{ bomb.name || ('Bomba ' + bomb.id) }}</ion-label>
-              </ion-chip>
-            </div>
-            <div class="bomb-header-right">
-              <ion-chip class="status-chip" [class.on]="isBombOn(bomb)" [class.off]="!isBombOn(bomb)">
-                <ion-label>{{ isBombOn(bomb) ? 'Ligada' : 'Desligada' }}</ion-label>
-              </ion-chip>
-              <ion-chip class="count-chip">
-                <ion-label>Ativo {{ activeCount(bomb) }}/3</ion-label>
-              </ion-chip>
-            </div>
-          </div>
-        </ion-label>
-      </ion-item>
+  <ion-accordion-group class="px-5 pb-8" *ngIf="bombs.length">
+    <div
+      *ngFor="let bomb of bombs"
+      class="mb-4 bg-ocean-card rounded-2xl shadow-lg border border-white/5"
+    >
+      <ion-accordion [value]="'bomb-' + bomb.id">
+        <div slot="header" class="p-4 w-full cursor-pointer">
+          <div class="flex items-center justify-between w-full gap-3">
+            <span
+              class="px-3 py-1.5 rounded-md text-[14px] uppercase font-bold tracking-wider border"
+              [style.borderColor]="bomb.color"
+              [style.color]="bomb.color"
+              [style.backgroundColor]="bomb.colorBg"
+            >
+              {{ bomb.name || ('Bomba ' + bomb.id) }}
+            </span>
 
-      <div class="config-body" slot="content">
-        <ion-item>
-          <ion-label position="stacked">Nome da bomba</ion-label>
-          <ion-input [(ngModel)]="bomb.name" placeholder="Nome opcional" maxlength="15"></ion-input>
-        </ion-item>
-
-        <ion-segment [(ngModel)]="bomb.activeScheduleIndex">
-          <ion-segment-button
-            *ngFor="let schedule of bomb.schedules; let i = index"
-            [value]="i"
-          >
-            Horario {{ i + 1 }}
-          </ion-segment-button>
-        </ion-segment>
-
-        <div *ngIf="bomb.schedules[bomb.activeScheduleIndex] as schedule">
-          <ion-item>
-            <ion-label position="stacked">Horario de acionamento</ion-label>
-            <ion-input type="time" [(ngModel)]="schedule.timeValue"></ion-input>
-          </ion-item>
-
-          <ion-item class="range-item">
-            <ion-label position="stacked">Dosagem (ml)</ion-label>
-            <ion-range
-              min="0.5"
-              max="15"
-              step="0.5"
-              [(ngModel)]="schedule.dosagem"
-              aria-label="Dosagem"
-            ></ion-range>
-            <ion-input
-              type="number"
-              min="0.5"
-              max="15"
-              step="0.5"
-              [(ngModel)]="schedule.dosagem"
-            ></ion-input>
-          </ion-item>
-
-          <ion-item>
-            <ion-label>Ativar horario</ion-label>
-            <ion-toggle slot="end" [(ngModel)]="schedule.status"></ion-toggle>
-          </ion-item>
-
-          <div class="day-grid">
-            <ion-label class="day-label">Dias da semana</ion-label>
-            <div class="day-chips">
-              <ion-chip
-                *ngFor="let day of days; let i = index"
-                [class.selected]="schedule.diasSemana[i]"
-                (click)="toggleDay(schedule, i)"
+            <div class="flex items-center gap-2">
+              <span
+                class="px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider border"
+                [ngClass]="
+                  isBombOn(bomb)
+                    ? 'border-green-500 text-green-400 bg-green-500/10'
+                    : 'border-red-500 text-red-400 bg-red-500/10'
+                "
               >
-                <ion-label>{{ day }}</ion-label>
-              </ion-chip>
+                {{ isBombOn(bomb) ? 'ON' : 'OFF' }}
+              </span>
+              <span class="px-2 py-1 rounded-md text-[10px] font-bold bg-ocean-light/50 text-text-muted border border-white/5">
+                {{ activeCount(bomb) }}/3
+              </span>
             </div>
           </div>
         </div>
-      </div>
-    </ion-accordion>
+
+        <div slot="content" class="p-6 pt-0 space-y-4">
+          <div>
+            <label class="text-sm text-text-muted">Nome da bomba</label>
+            <div class="mt-2 flex flex-wrap items-center gap-3">
+              <div
+                class="bg-ocean-dark/30 rounded-lg px-3 py-2 border border-ocean-light focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all w-40"
+              >
+                <ion-input
+                  [(ngModel)]="bomb.name"
+                  placeholder="Nome opcional"
+                  maxlength="15"
+                  class="bg-transparent text-text-main placeholder:text-text-muted text-sm"
+                ></ion-input>
+              </div>
+              <div class="relative">
+                <button
+                  type="button"
+                  class="h-8 w-8 rounded-md border border-white/10 bg-ocean-dark/70"
+                  [style.backgroundColor]="bomb.color"
+                  (click)="toggleColorPicker(bomb.id)"
+                  aria-label="Selecionar cor da bomba"
+                ></button>
+                <div
+                  *ngIf="openColorPickerId === bomb.id"
+                  class="absolute z-10 mt-2 p-2 rounded-xl border border-ocean-light bg-ocean-dark shadow-lg flex flex-wrap gap-2"
+                >
+                  <button
+                    type="button"
+                    *ngFor="let color of colorOptions"
+                    class="h-7 w-7 rounded-full border border-white/10 transition ring-2 ring-transparent"
+                    [style.backgroundColor]="color"
+                    [ngClass]="{ 'ring-white/70': bomb.color === color }"
+                    (click)="selectBombColor(bomb, color)"
+                    aria-label="Selecionar cor da bomba"
+                  ></button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <ion-segment
+            class="mt-4 bg-ocean-dark/40 border border-ocean-light rounded-xl p-1"
+            style="--background: transparent; --indicator-color: transparent;"
+            [(ngModel)]="bomb.activeScheduleIndex"
+          >
+            <ion-segment-button
+              *ngFor="let schedule of bomb.schedules; let i = index"
+              [value]="i"
+              class="text-xs"
+              style="--color: #6DA5C0; --color-checked: #05161A; --background-checked: #0F969C; --indicator-color: transparent;"
+            >
+              Horario {{ i + 1 }}
+            </ion-segment-button>
+          </ion-segment>
+
+          <div *ngIf="bomb.schedules[bomb.activeScheduleIndex] as schedule" class="space-y-4">
+            <div>
+              <label class="text-sm text-text-muted">Horario de acionamento</label>
+              <div
+                class="mt-2 bg-ocean-dark/30 rounded-lg px-4 py-2 border border-ocean-light focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all"
+              >
+                <ion-input
+                  type="time"
+                  [(ngModel)]="schedule.timeValue"
+                  class="bg-transparent text-text-main"
+                ></ion-input>
+              </div>
+            </div>
+
+            <div>
+              <label class="text-sm text-text-muted">Dosagem (ml)</label>
+              <div
+                class="mt-2 bg-ocean-dark/30 rounded-xl px-4 py-3 border border-ocean-light focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all"
+              >
+                <div class="flex items-center gap-3">
+                  <button
+                    type="button"
+                    class="h-11 w-11 rounded-lg border border-ocean-light text-text-muted text-lg font-bold hover:border-neon-cyan hover:text-neon-cyan transition"
+                    (click)="adjustDose(schedule, -doseStep)"
+                  >
+                    -
+                  </button>
+                  <ion-input
+                    type="number"
+                    inputmode="decimal"
+                    min="0.5"
+                    max="15"
+                    step="0.5"
+                    [(ngModel)]="schedule.dosagem"
+                    (ionBlur)="normalizeScheduleDose(schedule)"
+                    class="bg-transparent text-text-main text-2xl font-semibold text-center"
+                  ></ion-input>
+                  <button
+                    type="button"
+                    class="h-11 w-11 rounded-lg border border-ocean-light text-text-muted text-lg font-bold hover:border-neon-cyan hover:text-neon-cyan transition"
+                    (click)="adjustDose(schedule, doseStep)"
+                  >
+                    +
+                  </button>
+                </div>
+                <div class="flex flex-wrap gap-3 mt-4">
+                  <button
+                    type="button"
+                    class="px-5 py-3 rounded-lg text-base font-bold border border-ocean-light text-text-muted hover:border-neon-cyan hover:text-neon-cyan transition"
+                    (click)="setDosePreset(schedule, 0.5)"
+                  >
+                    0.5
+                  </button>
+                  <button
+                    type="button"
+                    class="px-5 py-3 rounded-lg text-base font-bold border border-ocean-light text-text-muted hover:border-neon-cyan hover:text-neon-cyan transition"
+                    (click)="setDosePreset(schedule, 1)"
+                  >
+                    1
+                  </button>
+                  <button
+                    type="button"
+                    class="px-5 py-3 rounded-lg text-base font-bold border border-ocean-light text-text-muted hover:border-neon-cyan hover:text-neon-cyan transition"
+                    (click)="setDosePreset(schedule, 2)"
+                  >
+                    2
+                  </button>
+                  <button
+                    type="button"
+                    class="px-5 py-3 rounded-lg text-base font-bold border border-ocean-light text-text-muted hover:border-neon-cyan hover:text-neon-cyan transition"
+                    (click)="setDosePreset(schedule, 5)"
+                  >
+                    5
+                  </button>
+                  <button
+                    type="button"
+                    class="px-5 py-3 rounded-lg text-base font-bold border border-ocean-light text-text-muted hover:border-neon-cyan hover:text-neon-cyan transition"
+                    (click)="setDosePreset(schedule, 10)"
+                  >
+                    10
+                  </button>
+                  <button
+                    type="button"
+                    class="px-5 py-3 rounded-lg text-base font-bold border border-ocean-light text-text-muted hover:border-neon-cyan hover:text-neon-cyan transition"
+                    (click)="setDosePreset(schedule, 15)"
+                  >
+                    15
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-text-muted">Ativar horario</span>
+              <button
+                type="button"
+                class="h-11 w-11 rounded-xl border flex items-center justify-center shadow-sm"
+                [ngClass]="
+                  schedule.status
+                    ? 'border-green-400 text-green-300 bg-green-500/20'
+                    : 'border-red-400 text-red-300 bg-red-500/20'
+                "
+                (click)="schedule.status = !schedule.status"
+              >
+                <ion-icon
+                  [name]="schedule.status ? 'power' : 'power-outline'"
+                  class="text-lg"
+                ></ion-icon>
+              </button>
+            </div>
+
+            <div>
+              <label class="text-sm text-text-muted">Dias da semana</label>
+              <div class="flex gap-3 flex-wrap mt-3">
+                <button
+                  type="button"
+                  *ngFor="let day of days; let i = index"
+                  (click)="toggleDay(schedule, i)"
+                  [class]="
+                    schedule.diasSemana[i]
+                      ? 'bg-cyan-400 text-ocean-dark font-bold shadow-[0_0_10px_rgba(34,211,238,0.45)] rounded-full px-5 py-2.5 text-base min-w-[52px]'
+                      : 'border border-ocean-light text-text-muted rounded-full px-5 py-2.5 text-base min-w-[52px]'
+                  "
+                >
+                  {{ day }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </ion-accordion>
+    </div>
   </ion-accordion-group>
 
-  <div class="actions">
-    <ion-button expand="block" (click)="saveConfig()" [disabled]="saving || !bombs.length">
+  <div class="px-5 pb-12">
+    <button
+      type="button"
+      class="w-full bg-gradient-to-r from-teal-dim to-neon-cyan text-white font-bold rounded-xl py-4 shadow-lg active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed"
+      (click)="saveConfig()"
+      [disabled]="saving || !bombs.length"
+    >
       Salvar configuracoes
-    </ion-button>
-    <ion-button expand="block" fill="outline" (click)="goToCalibracao()">
+    </button>
+    <button
+      type="button"
+      class="w-full border border-neon-cyan text-neon-cyan rounded-xl py-3 mt-4"
+      (click)="goToCalibracao()"
+    >
       Teste/Calibracao
-    </ion-button>
+    </button>
   </div>
 
   <ion-toast

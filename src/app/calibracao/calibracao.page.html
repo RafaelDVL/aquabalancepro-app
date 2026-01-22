@@ -1,79 +1,113 @@
 <ion-header>
-  <ion-toolbar class="app-toolbar">
+  <ion-toolbar class="bg-transparent text-neon-cyan" style="--background: transparent;">
     <ion-buttons slot="start">
-      <ion-back-button defaultHref="/configuracao"></ion-back-button>
+      <ion-back-button defaultHref="/configuracao" color="primary" class="text-neon-cyan"></ion-back-button>
     </ion-buttons>
-    <ion-title>Calibracao</ion-title>
+    <ion-title class="font-bold">Calibracao</ion-title>
   </ion-toolbar>
 </ion-header>
 
-<ion-content class="calibracao-page">
-  <section class="page-hero">
-    <div>
-      <h1>Calibrar dosagem</h1>
-      <p>Faça um teste, meca o volume e ajuste o coeficiente.</p>
-    </div>
+<ion-content class="bg-ocean-dark text-text-main" style="--background: #05161A;">
+  <section class="px-5 pt-6 pb-4 space-y-2">
+    <h1 class="text-xl font-bold text-text-main">Calibrar dosagem</h1>
+    <p class="text-sm text-text-muted">Faça um teste, meça o volume e ajuste o coeficiente.</p>
   </section>
 
-  <ion-note class="error-note" *ngIf="errorMessage">{{ errorMessage }}</ion-note>
+  <p class="px-5 text-sm text-red-400" *ngIf="errorMessage">{{ errorMessage }}</p>
 
-  <ion-card>
-    <ion-card-header>
-      <ion-card-title>Calibracao guiada</ion-card-title>
-    </ion-card-header>
-    <ion-card-content>
-      <ion-item>
-        <ion-label position="stacked">Bomba</ion-label>
-        <ion-select [(ngModel)]="selectedBombId">
-          <ion-select-option *ngFor="let bomb of bombs" [value]="bomb.id">
-            {{ bomb.name || ('Bomba ' + bomb.id) }}
-          </ion-select-option>
-        </ion-select>
-      </ion-item>
+  <section class="px-5 pb-6 space-y-4">
+    <div class="bg-ocean-card rounded-2xl shadow-lg border border-white/5 p-6 space-y-4">
+      <div>
+        <h2 class="text-base font-semibold text-text-main">Calibracao guiada</h2>
+        <p class="text-sm text-text-muted">Dose fixa de 1 ml para calibrar.</p>
+      </div>
 
-      <ion-item>
-        <ion-label position="stacked">Dose de teste</ion-label>
-        <ion-note slot="end">1 ml</ion-note>
-      </ion-item>
+      <div>
+        <label class="text-sm text-text-muted">Bomba</label>
+        <div
+          class="mt-2 bg-ocean-dark/30 rounded-lg px-4 py-2 border border-ocean-light focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all"
+        >
+          <ion-select
+            [(ngModel)]="selectedBombId"
+            class="bg-transparent text-text-main"
+            style="--placeholder-color: #6DA5C0; --color: #E0E0E0;"
+          >
+            <ion-select-option *ngFor="let bomb of bombs" [value]="bomb.id">
+              {{ bomb.name || ('Bomba ' + bomb.id) }}
+            </ion-select-option>
+          </ion-select>
+        </div>
+      </div>
 
-      <ion-note class="coef-note" *ngIf="selectedBomb">
-        Coeficiente atual: {{ selectedBomb.calibrCoef }}
-      </ion-note>
+      <div class="flex items-center justify-between">
+        <span class="text-sm text-text-muted">Dose de teste</span>
+        <span class="text-sm font-semibold text-text-main">1 ml</span>
+      </div>
 
-      <ion-button expand="block" (click)="startCalibration()" [disabled]="pendingCalibration || !bombs.length">
+      <p class="text-sm text-text-muted" *ngIf="selectedBomb">
+        Coeficiente atual: <span class="text-text-main font-semibold">{{ selectedBomb.calibrCoef }}</span>
+      </p>
+
+      <button
+        type="button"
+        class="w-full bg-gradient-to-r from-teal-dim to-neon-cyan text-white font-bold rounded-xl py-4 shadow-lg active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed"
+        (click)="startCalibration()"
+        [disabled]="pendingCalibration || !bombs.length"
+      >
         Iniciar dosagem
-      </ion-button>
-    </ion-card-content>
-  </ion-card>
+      </button>
+    </div>
 
-  <ion-card>
-    <ion-card-header>
-      <ion-card-title>Teste rapido</ion-card-title>
-    </ion-card-header>
-    <ion-card-content>
-      <ion-item>
-        <ion-label position="stacked">Bomba</ion-label>
-        <ion-select [(ngModel)]="quickTestBombId">
-          <ion-select-option *ngFor="let bomb of bombs" [value]="bomb.id">
-            {{ bomb.name || ('Bomba ' + bomb.id) }}
-          </ion-select-option>
-        </ion-select>
-      </ion-item>
+    <div class="bg-ocean-card rounded-2xl shadow-lg border border-white/5 p-6 space-y-4">
+      <div>
+        <h2 class="text-base font-semibold text-text-main">Teste rapido</h2>
+        <p class="text-sm text-text-muted">Acionamento manual para conferir.</p>
+      </div>
 
-      <ion-item>
-        <ion-label position="stacked">Dosagem (ml)</ion-label>
-        <ion-select [(ngModel)]="quickTestDose">
-          <ion-select-option *ngFor="let dose of quickDoseOptions" [value]="dose">
-            {{ dose }} ml
-          </ion-select-option>
-        </ion-select>
-      </ion-item>
+      <div>
+        <label class="text-sm text-text-muted">Bomba</label>
+        <div
+          class="mt-2 bg-ocean-dark/30 rounded-lg px-4 py-2 border border-ocean-light focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all"
+        >
+          <ion-select
+            [(ngModel)]="quickTestBombId"
+            class="bg-transparent text-text-main"
+            style="--placeholder-color: #6DA5C0; --color: #E0E0E0;"
+          >
+            <ion-select-option *ngFor="let bomb of bombs" [value]="bomb.id">
+              {{ bomb.name || ('Bomba ' + bomb.id) }}
+            </ion-select-option>
+          </ion-select>
+        </div>
+      </div>
 
-      <ion-button expand="block" fill="outline" (click)="runQuickTest()" [disabled]="!bombs.length">
+      <div>
+        <label class="text-sm text-text-muted">Dosagem (ml)</label>
+        <div
+          class="mt-2 bg-ocean-dark/30 rounded-lg px-4 py-2 border border-ocean-light focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all"
+        >
+          <ion-select
+            [(ngModel)]="quickTestDose"
+            class="bg-transparent text-text-main"
+            style="--placeholder-color: #6DA5C0; --color: #E0E0E0;"
+          >
+            <ion-select-option *ngFor="let dose of quickDoseOptions" [value]="dose">
+              {{ dose }} ml
+            </ion-select-option>
+          </ion-select>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        class="w-full border border-neon-cyan text-neon-cyan rounded-xl py-3"
+        (click)="runQuickTest()"
+        [disabled]="!bombs.length"
+      >
         Acionar
-      </ion-button>
-    </ion-card-content>
-  </ion-card>
+      </button>
+    </div>
+  </section>
 
   <ion-alert
     [isOpen]="showDosePrompt"
