@@ -3,5 +3,8 @@
     "@ionic/angular/common",
     "@ionic/angular"
   ],
-  "java.configuration.updateBuildConfiguration": "interactive"
+  "java.configuration.updateBuildConfiguration": "interactive",
+  "chat.tools.terminal.autoApprove": {
+    "npx cap": true
+  }
 }

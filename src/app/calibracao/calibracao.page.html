@@ -7,120 +7,137 @@
   </ion-toolbar>
 </ion-header>
 
-<ion-content class="bg-ocean-dark text-text-main" style="--background: #05161A;">
-  <section class="px-5 pt-6 pb-4 space-y-2">
-    <h1 class="text-xl font-bold text-text-main">Calibrar dosagem</h1>
-    <p class="text-sm text-text-muted">Faça um teste, meça o volume e ajuste o coeficiente.</p>
-  </section>
+<ion-content [fullscreen]="true" class="relative text-text-main">
+  <div class="fixed inset-0 w-full h-full z-0 pointer-events-none">
+    <img src="assets/followers.jpg" class="w-full h-full object-cover" alt="Background" />
+    <div class="absolute inset-0 bg-gradient-to-b from-[#05161A]/70 via-[#05161A]/85 to-[#05161A]"></div>
+  </div>
 
-  <p class="px-5 text-sm text-red-400" *ngIf="errorMessage">{{ errorMessage }}</p>
-
-  <section class="px-5 pb-6 space-y-4">
-    <div class="bg-ocean-card rounded-2xl shadow-lg border border-white/5 p-6 space-y-4">
-      <div>
-        <h2 class="text-base font-semibold text-text-main">Calibracao guiada</h2>
-        <p class="text-sm text-text-muted">Dose fixa de 1 ml para calibrar.</p>
+  <div class="relative z-10 px-5 pt-6 pb-10 space-y-5">
+    <div
+      class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl space-y-5 relative overflow-hidden group">
+      <div
+        class="absolute -top-10 -right-10 w-28 h-28 bg-neon-cyan/20 rounded-full blur-3xl group-hover:bg-neon-cyan/30 transition-all duration-700">
       </div>
-
-      <div>
-        <label class="text-sm text-text-muted">Bomba</label>
-        <div
-          class="mt-2 bg-ocean-dark/30 rounded-lg px-4 py-2 border border-ocean-light focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all"
-        >
-          <ion-select
-            [(ngModel)]="selectedBombId"
-            class="bg-transparent text-text-main"
-            style="--placeholder-color: #6DA5C0; --color: #E0E0E0;"
-          >
-            <ion-select-option *ngFor="let bomb of bombs" [value]="bomb.id">
-              {{ bomb.name || ('Bomba ' + bomb.id) }}
-            </ion-select-option>
-          </ion-select>
+      <div class="relative z-10 space-y-4">
+        <div>
+          <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Calibração das Bombas</p>
         </div>
+
+        <div class="space-y-2">
+          <label class="text-sm text-white/70">Bomba</label>
+          <div
+            class="bg-white/5 rounded-xl px-4 py-2 border border-white/10 focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all">
+            <ion-select [(ngModel)]="selectedBombId" class="bg-transparent text-white"
+              style="--placeholder-color: #6DA5C0; --color: #E0E0E0;">
+              <ion-select-option *ngFor="let bomb of bombs" [value]="bomb.id">
+                {{ bomb.name || ('Bomba ' + bomb.id) }}
+              </ion-select-option>
+            </ion-select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 text-sm text-white/80">
+          <div class="bg-white/5 border border-white/5 rounded-xl p-3 flex items-center justify-between">
+            <span class="text-white/60">Dose de teste</span>
+            <span class="font-semibold text-white">1 ml</span>
+          </div>
+          <div class="bg-white/5 border border-white/5 rounded-xl p-3 flex items-center justify-between"
+            *ngIf="selectedBomb">
+            <span class="text-white/60">Coeficiente</span>
+            <span class="font-semibold text-neon-cyan">{{ selectedBomb.calibrCoef }}</span>
+          </div>
+        </div>
+
+        <ion-button fill="outline" expand="block"
+          class="h-12 text-sm font-bold tracking-wider shadow-[0_0_15px_rgba(34,211,238,0.1)] transition-all hover:shadow-[0_0_25px_rgba(34,211,238,0.3)]"
+          style="
+    --border-color: #22d3ee;
+    --color: #22d3ee;
+    --border-radius: 12px;
+    --border-width: 1.5px;
+    --background-hover: rgba(34, 211, 238, 0.08);
+    --ripple-color: #22d3ee; /* <--- A MÁGICA ACONTECE AQUI */
+    --ripple-opacity: 0.2;
+  " (click)="startCalibration()" [disabled]="pendingCalibration || !bombs.length">
+          <ion-icon slot="start" name="color-wand-outline" class="text-xl"></ion-icon>
+          Iniciar Calibração
+        </ion-button>
       </div>
-
-      <div class="flex items-center justify-between">
-        <span class="text-sm text-text-muted">Dose de teste</span>
-        <span class="text-sm font-semibold text-text-main">1 ml</span>
-      </div>
-
-      <p class="text-sm text-text-muted" *ngIf="selectedBomb">
-        Coeficiente atual: <span class="text-text-main font-semibold">{{ selectedBomb.calibrCoef }}</span>
-      </p>
-
-      <button
-        type="button"
-        class="w-full bg-gradient-to-r from-teal-dim to-neon-cyan text-white font-bold rounded-xl py-4 shadow-lg active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed"
-        (click)="startCalibration()"
-        [disabled]="pendingCalibration || !bombs.length"
-      >
-        Iniciar dosagem
-      </button>
     </div>
 
-    <div class="bg-ocean-card rounded-2xl shadow-lg border border-white/5 p-6 space-y-4">
-      <div>
-        <h2 class="text-base font-semibold text-text-main">Teste rapido</h2>
-        <p class="text-sm text-text-muted">Acionamento manual para conferir.</p>
+    <div
+      class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl space-y-5 relative overflow-hidden group">
+      <div
+        class="absolute -top-8 -left-12 w-32 h-32 bg-purple-400/15 rounded-full blur-3xl group-hover:bg-purple-400/25 transition-all duration-700">
       </div>
-
-      <div>
-        <label class="text-sm text-text-muted">Bomba</label>
-        <div
-          class="mt-2 bg-ocean-dark/30 rounded-lg px-4 py-2 border border-ocean-light focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all"
-        >
-          <ion-select
-            [(ngModel)]="quickTestBombId"
-            class="bg-transparent text-text-main"
-            style="--placeholder-color: #6DA5C0; --color: #E0E0E0;"
-          >
-            <ion-select-option *ngFor="let bomb of bombs" [value]="bomb.id">
-              {{ bomb.name || ('Bomba ' + bomb.id) }}
-            </ion-select-option>
-          </ion-select>
+      <div class="relative z-10 space-y-4">
+        <div>
+          <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Acionamento Manual</p>
         </div>
-      </div>
 
-      <div>
-        <label class="text-sm text-text-muted">Dosagem (ml)</label>
-        <div
-          class="mt-2 bg-ocean-dark/30 rounded-lg px-4 py-2 border border-ocean-light focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all"
-        >
-          <ion-select
-            [(ngModel)]="quickTestDose"
-            class="bg-transparent text-text-main"
-            style="--placeholder-color: #6DA5C0; --color: #E0E0E0;"
-          >
-            <ion-select-option *ngFor="let dose of quickDoseOptions" [value]="dose">
-              {{ dose }} ml
-            </ion-select-option>
-          </ion-select>
+        <div class="space-y-2">
+          <label class="text-sm text-white/70">Bomba</label>
+          <div
+            class="bg-white/5 rounded-xl px-4 py-2 border border-white/10 focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all">
+            <ion-select [(ngModel)]="quickTestBombId" class="bg-transparent text-white"
+              style="--placeholder-color: #6DA5C0; --color: #E0E0E0;">
+              <ion-select-option *ngFor="let bomb of bombs" [value]="bomb.id">
+                {{ bomb.name || ('Bomba ' + bomb.id) }}
+              </ion-select-option>
+            </ion-select>
+          </div>
         </div>
-      </div>
 
-      <button
-        type="button"
-        class="w-full border border-neon-cyan text-neon-cyan rounded-xl py-3"
-        (click)="runQuickTest()"
-        [disabled]="!bombs.length"
-      >
-        Acionar
-      </button>
+        <div class="space-y-4">
+          <div class="space-y-2">
+            <label class="text-sm text-white/70">Dosagem (ml)</label>
+            <div class="flex items-center gap-3">
+              <button type="button" (click)="decreaseQuickDose()"
+                class="h-12 w-12 flex items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white hover:border-neon-cyan/40 hover:bg-white/10 active:scale-90 transition-all font-bold text-lg">
+                −
+              </button>
+              <input type="number" [(ngModel)]="quickTestDose" step="0.1" min="0"
+                class="flex-1 h-12 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-center font-semibold focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan transition-all placeholder-white/30"
+                placeholder="0.0" />
+              <button type="button" (click)="increaseQuickDose()"
+                class="h-12 w-12 flex items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white hover:border-neon-cyan/40 hover:bg-white/10 active:scale-90 transition-all font-bold text-lg">
+                +
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <p class="text-xs text-white/50 uppercase tracking-widest font-semibold">Atalhos rápidos</p>
+            <div class="grid grid-cols-5 gap-2">
+              <button *ngFor="let dose of quickDoseOptions" type="button" (click)="quickTestDose = dose"
+                class="h-10 rounded-xl border border-white/10 bg-white/5 text-white font-semibold transition-all duration-200 text-sm hover:border-neon-cyan/40 hover:bg-white/10">
+                {{ dose }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <ion-button fill="outline" expand="block"
+          class="h-12 text-sm font-bold tracking-wider shadow-[0_0_15px_rgba(168,85,247,0.1)] transition-all hover:shadow-[0_0_25px_rgba(168,85,247,0.3)]"
+          style="
+          --border-color: #a855f7;
+          --color: #d8b4fe;
+          --border-radius: 12px;
+          --border-width: 1.5px;
+          --background-hover: rgba(168, 85, 247, 0.08);
+          --ripple-color: #a855f7; /* <--- A MÁGICA ACONTECE AQUI */
+          --ripple-opacity: 0.2;
+        " (click)="runQuickTest()" [disabled]="!bombs.length">
+          <ion-icon slot="start" name="water-outline" class="text-xl"></ion-icon>
+          Liberar Dose
+        </ion-button>
+      </div>
     </div>
-  </section>
+  </div>
 
-  <ion-alert
-    [isOpen]="showDosePrompt"
-    header="Quantidade dosada"
-    message="Digite o volume real medido (ml)."
-    [inputs]="alertInputs"
-    [buttons]="alertButtons"
-  ></ion-alert>
+  <ion-alert [isOpen]="showDosePrompt" header="Quantidade dosada" message="Digite o volume real medido (ml)."
+    [inputs]="alertInputs" [buttons]="alertButtons"></ion-alert>
 
-  <ion-toast
-    [isOpen]="toastOpen"
-    [message]="toastMessage"
-    duration="2000"
-    (didDismiss)="toastOpen = false"
-  ></ion-toast>
+  <ion-toast [isOpen]="toastOpen" [message]="toastMessage" duration="2000" (didDismiss)="toastOpen = false"></ion-toast>
 </ion-content>

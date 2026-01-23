@@ -3,7 +3,7 @@ import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { addIcons } from 'ionicons';
-import { power, cloudUploadOutline, beakerOutline  } from 'ionicons/icons';
+import { power, cloudUploadOutline } from 'ionicons/icons';
 import {
   IonAccordion,
   IonAccordionGroup,
@@ -92,7 +92,7 @@ export class ConfiguracaoPage {
   ];
 
   constructor(private readonly doser: DoserService, private readonly router: Router) {
-    addIcons({ power, cloudUploadOutline, beakerOutline });
+    addIcons({ power, cloudUploadOutline });
   }
 
   async ionViewWillEnter(): Promise<void> {
@@ -173,10 +173,6 @@ export class ConfiguracaoPage {
     } finally {
       this.saving = false;
     }
-  }
-
-  goToCalibracao(): void {
-    this.router.navigateByUrl('/calibracao');
   }
 
   private findDuplicateTimes(): string {

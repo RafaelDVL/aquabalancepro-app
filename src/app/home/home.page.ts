@@ -19,7 +19,9 @@ import {
   wifi,
   cloud,
   timeOutline,
-  refreshCircle
+  refreshCircle,
+  statsChart,
+  beakerOutline,
 } from 'ionicons/icons';
 
 import { firstValueFrom, interval, Subscription } from 'rxjs';
@@ -43,7 +45,7 @@ export class HomePage {
   canConfigure = false;
   toastMessage = '';
   toastOpen = false;
-  isConnectedToDevice = false; // Indica se o app consegue alcançar o ESP32
+  isConnectedToDevice = false; // Indica se o app consegue alcançar o dispositivo
   // Polling para manter Wi-Fi e hora atualizados
   private pollingSub?: Subscription;
   private pollingBusy = false;
@@ -51,14 +53,7 @@ export class HomePage {
 
   constructor(private readonly doser: DoserService, private readonly router: Router) {
     // Registra os ícones para que apareçam no HTML
-    addIcons({
-      settingsSharp,
-      receiptOutline,
-      wifi,
-      cloud,
-      timeOutline,
-      refreshCircle
-    });
+    addIcons({timeOutline,wifi,refreshCircle,settingsSharp,statsChart,receiptOutline,cloud,beakerOutline});
   }
 
   ionViewWillEnter(): void {
@@ -136,5 +131,13 @@ export class HomePage {
 
   openLogs(): void {
     void this.router.navigateByUrl('/logs');
+  }
+
+  openAnalytics() {
+    this.router.navigate(['/analytics']);
+  }
+
+  openCalibracao(): void {
+    void this.router.navigateByUrl('/calibracao');
   }
 }

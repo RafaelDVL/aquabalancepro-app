@@ -7,19 +7,21 @@ import {
   IonButtons,
   IonContent,
   IonHeader,
+  IonIcon,
   IonSelect,
   IonSelectOption,
   IonTitle,
   IonToast,
-  IonToolbar,
-} from '@ionic/angular/standalone';
+  IonToolbar, IonButton } from '@ionic/angular/standalone';
 import { firstValueFrom } from 'rxjs';
 import { BombConfig, DoserService } from '../services/doser.service';
+import { addIcons } from 'ionicons';
+import { colorWandOutline, waterOutline } from 'ionicons/icons';
 
 @Component({
   selector: 'app-calibracao',
   templateUrl: './calibracao.page.html',
-  imports: [
+  imports: [IonButton, IonIcon,
     CommonModule,
     FormsModule,
     IonAlert,
@@ -63,7 +65,9 @@ export class CalibracaoPage {
     },
   ];
 
-  constructor(private readonly doser: DoserService) {}
+  constructor(private readonly doser: DoserService) {
+    addIcons({ colorWandOutline, waterOutline });
+  }
 
   async ionViewWillEnter(): Promise<void> {
     await this.loadConfig();
@@ -126,6 +130,16 @@ export class CalibracaoPage {
       this.errorMessage = error instanceof Error ? error.message : 'Falha ao salvar calibracao.';
     } finally {
       this.showDosePrompt = false;
+    }
+  }
+
+  increaseQuickDose(): void {
+    this.quickTestDose = Number((this.quickTestDose + 0.1).toFixed(1));
+  }
+
+  decreaseQuickDose(): void {
+    if (this.quickTestDose > 0.1) {
+      this.quickTestDose = Number((this.quickTestDose - 0.1).toFixed(1));
     }
   }
 

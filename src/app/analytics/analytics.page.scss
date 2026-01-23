@@ -1,0 +1,10 @@
+ion-segment {
+  --background: transparent;
+}
+
+ion-segment-button {
+  --color: rgba(148, 163, 184, 0.7);
+  --color-checked: #0F969C;
+  --indicator-color: #0F969C;
+  min-height: 40px;
+}
