@@ -5,7 +5,6 @@
 #include <Preferences.h>
 #include <FS.h>
 #include <LittleFS.h>
-#include <Firebase_ESP_Client.h>
 #include <ArduinoJson.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
@@ -23,8 +22,6 @@
 #define I2C_SCL 20
 
 #define MAX_PUMP_QUEUE 10
-#define MAX_PENDING_LOGS 10
-#define LOG_INTERVAL 500
 #define CONFIG_DOC_SIZE 8192
 #define LOG_LIMIT 300
 #define LOG_FILE "/logs.jsonl"
@@ -38,32 +35,19 @@ const char *AP_PASSWORD = "12345678";
 const char *STA_SSID = "<SEU_SSID>";
 const char *STA_PASSWORD = "<SUA_SENHA>";
 constexpr bool kApOnlyMode = false;
-constexpr bool kFirebaseEnabled = false;  // NOVO: Desabilita Firebase
-
-// --- Firebase ---
-#define API_KEY "<SUA_FIREBASE_API_KEY>"
-#define DATABASE_URL "<SUA_DATABASE_URL>"
 
 // --- Objetos Globais ---
 RTC_DS3231 rtc;
 Preferences preferences;
-FirebaseData fbdo;
-FirebaseAuth auth;
-FirebaseConfig config;
 AsyncWebServer server(80);
 Adafruit_NeoPixel statusLed(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // --- Variáveis de Controle ---
-unsigned long lastFirebaseReconnectAttempt = 0;
-const unsigned long firebaseReconnectInterval = 600000;
-const unsigned long firebaseStatusLogInterval = 10000;
-
 unsigned long lastWifiAttempt = 0;
 const unsigned long wifiReconnectInterval = 15000;
 
 volatile uint8_t apClientCount = 0;
 bool staEnabled = false;
-bool firebaseInitialized = false;
 
 unsigned long lastTimeSyncAttempt = 0;
 const unsigned long timeSyncInterval = 60000;
@@ -72,19 +56,6 @@ const long gmtOffsetSec = -3 * 3600;
 const int daylightOffsetSec = 0;
 
 // --- Estruturas ---
-struct PendingLog
-{
-  int bombaIndex;
-  float dosagem;
-  String origem;
-  DateTime timestamp;
-};
-
-PendingLog pendingLogs[MAX_PENDING_LOGS];
-volatile int pendingHead = 0;
-volatile int pendingTail = 0;
-unsigned long lastLogAttempt = 0;
-
 struct Schedule
 {
   int hour;
@@ -178,12 +149,6 @@ void disableSta();
 void setupWifi();
 void ensureStaWifi();
 
-// Firebase
-void initFirebase();
-bool isFirebaseReady();
-void logFirebaseStatusChange();
-void processPendingLogs();
-
 // Tempo / NTP
 void ensureTimeSynced();
 
@@ -221,7 +186,6 @@ void checkSchedules();
 
 // Pump queue
 bool enqueuePumpJob(int bombaIndex, float dosagem, const String &origem);
-void enqueuePendingLog(int bombaIndex, float dosagem, const String &origem, const DateTime &timestamp);
 int pumpPinForIndex(int bombaIndex);
 void processPumpQueue();
 void startNextPumpJob();
@@ -275,133 +239,6 @@ const char *httpMethodToString(WebRequestMethodComposite method)
 bool shouldPauseForAp()
 {
   return kApOnlyMode || apClientCount > 0;
-}
-
-bool isFirebaseReady()
-{
-  if (!kFirebaseEnabled) return true;  // Simula "pronto" para não bloquear
-  return firebaseInitialized && Firebase.ready();
-}
-
-// =========================================================
-// Firebase
-// =========================================================
-String getTokenType(TokenInfo info)
-{
-  switch (info.type)
-  {
-  case token_type_undefined:           return "undefined";
-  case token_type_legacy_token:        return "legacy token";
-  case token_type_id_token:            return "id token";
-  case token_type_custom_token:        return "custom token";
-  case token_type_oauth2_access_token: return "OAuth2.0 access token";
-  default:                             return "unknown";
-  }
-}
-
-String getTokenStatus(TokenInfo info)
-{
-  switch (info.status)
-  {
-  case token_status_uninitialized: return "uninitialized";
-  case token_status_on_signing:    return "on signing";
-  case token_status_on_request:    return "on request";
-  case token_status_on_refresh:    return "on refreshing";
-  case token_status_ready:         return "ready";
-  case token_status_error:         return "error";
-  default:                         return "unknown";
-  }
-}
-
-void tokenStatusCallback(TokenInfo info)
-{
-  Serial.printf("[firebase] token: %s / %s\n",
-                getTokenType(info).c_str(),
-                getTokenStatus(info).c_str());
-  if (info.status == token_status_error)
-  {
-    Serial.printf("[firebase] token error: %s (%d)\n",
-                  info.error.message.c_str(),
-                  info.error.code);
-  }
-}
-
-void initFirebase()
-{
-  if (!kFirebaseEnabled) {
-    Serial.println("[firebase] Firebase desabilitado (kFirebaseEnabled = false)");
-    return;
-  }
-  config.api_key = API_KEY;
-  config.database_url = DATABASE_URL;
-  config.token_status_callback = tokenStatusCallback;
-
-  // Preencha com seu usuário/senha (evite hardcode em produção)
-  auth.user.email = "<SEU_EMAIL>";
-  auth.user.password = "<SUA_SENHA>";
-
-  Serial.println("[firebase] Inicializando Firebase...");
-  Firebase.begin(&config, &auth);
-}
-
-void processPendingLogs()
-{
-  if (!kFirebaseEnabled) return;  // Pula processamento
-  if (pendingHead == pendingTail) return;
-  if (millis() - lastLogAttempt < LOG_INTERVAL) return;
-
-  lastLogAttempt = millis();
-  PendingLog &log = pendingLogs[pendingHead];
-
-  Serial.printf("[log] Tentando enviar log p/ Firebase: %s, %.2fml\n",
-                bombas[log.bombaIndex].name.c_str(), log.dosagem);
-
-  String path = "/logs/" + String(log.timestamp.unixtime());
-  FirebaseJson json;
-  json.set("timestamp", formatTimestamp(log.timestamp));
-  json.set("bomba", bombas[log.bombaIndex].name);
-  json.set("dosagem", log.dosagem);
-  json.set("origem", log.origem);
-
-  if (!Firebase.ready() && millis() - lastFirebaseReconnectAttempt > firebaseReconnectInterval)
-  {
-    lastFirebaseReconnectAttempt = millis();
-    Serial.println("[firebase] refresh token (log attempt)");
-    Firebase.refreshToken(&config);
-    Firebase.begin(&config, &auth);
-  }
-
-  if (Firebase.ready() && Firebase.RTDB.setJSON(&fbdo, path.c_str(), &json))
-  {
-    Serial.println("[log] Log enviado com sucesso!");
-    pendingHead = (pendingHead + 1) % MAX_PENDING_LOGS;
-  }
-  else
-  {
-    Serial.printf("[log] Falha ao enviar log: %s\n", fbdo.errorReason().c_str());
-  }
-}
-
-void logFirebaseStatusChange()
-{
-  if (!kFirebaseEnabled) return;  // Pula log
-  if (!firebaseInitialized) return;
-
-  static bool lastReady = false;
-  static bool initialized = false;
-  static unsigned long lastLog = 0;
-
-  bool ready = Firebase.ready();
-  unsigned long now = millis();
-
-  bool shouldLog = !initialized || ready != lastReady || (now - lastLog >= firebaseStatusLogInterval);
-  if (!shouldLog) return;
-
-  initialized = true;
-  lastReady = ready;
-  lastLog = now;
-
-  Serial.printf("[firebase] Status: %s\n", ready ? "Pronto (Ready)" : "Nao Pronto");
 }
 
 // =========================================================
@@ -464,18 +301,12 @@ void setupWifi()
 
 void enableSta()
 {
-  if (kApOnlyMode || staEnabled || !kFirebaseEnabled) return;  // Adiciona verificação
+  if (kApOnlyMode || staEnabled) return;
   WiFi.setAutoReconnect(true);
   WiFi.persistent(false);
   WiFi.begin(STA_SSID, STA_PASSWORD);
   Serial.printf("[wifi] STA Habilitado. Tentando: %s\n", STA_SSID);
   staEnabled = true;
-
-  if (!firebaseInitialized)
-  {
-    initFirebase();
-    firebaseInitialized = true;
-  }
 }
 
 void disableSta()
@@ -499,7 +330,6 @@ void applyApPriority()
 
 void ensureStaWifi()
 {
-  if (!kFirebaseEnabled) return;  // Desabilita tentativa de STA se Firebase off
   if (shouldPauseForAp()) return;
   if (!staEnabled) return;
   if (WiFi.status() == WL_CONNECTED) return;
@@ -549,9 +379,6 @@ void ensureTimeSynced()
     Serial.printf("[time] Sincronizado com sucesso! Data: %02d/%02d/%04d %02d:%02d:%02d\n",
                   timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900,
                   timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-
-    Serial.println("[firebase] Refresh token apos sync de tempo");
-    Firebase.refreshToken(&config);
   }
   else
   {
@@ -578,9 +405,6 @@ void handleStatus(AsyncWebServerRequest *request)
   JsonObject ap = doc["ap"].to<JsonObject>();
   ap["ssid"] = AP_SSID;
   ap["ip"] = WiFi.softAPIP().toString();
-
-  JsonObject firebase = doc["firebase"].to<JsonObject>();
-  firebase["ready"] = !shouldPauseForAp() && isFirebaseReady();
 
   String payload;
   serializeJson(doc, payload);
@@ -964,6 +788,7 @@ void appendLocalLog(int bombaIndex, float dosagem, const String &origem, const D
   }
 
   StaticJsonDocument<256> doc;
+  doc["bombaId"] = bombaIndex + 1;
   doc["timestamp"] = formatTimestamp(timestamp);
   doc["bomba"] = bombas[bombaIndex].name;
   doc["dosagem"] = dosagem;
@@ -1286,21 +1111,6 @@ bool enqueuePumpJob(int bombaIndex, float dosagem, const String &origem)
   return queued;
 }
 
-void enqueuePendingLog(int bombaIndex, float dosagem, const String &origem, const DateTime &timestamp)
-{
-  int nextTail = (pendingTail + 1) % MAX_PENDING_LOGS;
-  if (nextTail == pendingHead)
-  {
-    Serial.println("[log] Fila de logs cheia! Descartando registro.");
-    return;
-  }
-
-  pendingLogs[pendingTail] = {bombaIndex, dosagem, origem, timestamp};
-  pendingTail = nextTail;
-
-  Serial.printf("[log] Log enfileirado para envio: Bomba %d, %.2f ml\n", bombaIndex + 1, dosagem);
-}
-
 int pumpPinForIndex(int bombaIndex)
 {
   switch (bombaIndex)
@@ -1333,7 +1143,6 @@ void finishPumpJob()
   }
 
   saveBombasConfig();
-  enqueuePendingLog(bombaIndex, activeJob.dosagem, activeJob.origem, activeJob.timestamp);
   appendLocalLog(bombaIndex, activeJob.dosagem, activeJob.origem, activeJob.timestamp);
 }
 
@@ -1428,7 +1237,7 @@ void updateStatusLed()
     updateLedMode(LED_MODE_DOSING);
   else if (!systemReady)
     updateLedMode(LED_MODE_BOOT);
-  else if (WiFi.status() != WL_CONNECTED || (!shouldPauseForAp() && !isFirebaseReady()))
+  else if (WiFi.status() != WL_CONNECTED)
     updateLedMode(LED_MODE_NO_NET);
   else
     updateLedMode(LED_MODE_READY);
@@ -1525,8 +1334,6 @@ void setup()
 
   applyApPriority();
   logWifiStatusChange();
-  if (!kApOnlyMode && kFirebaseEnabled)  // Adiciona verificação
-    logFirebaseStatusChange();
 
   Serial.println("[system] Setup concluido. Entrando no loop principal...");
 }
@@ -1538,10 +1345,9 @@ void loop()
   applyApPriority();
   ensureStaWifi();
 
-  if (!pauseForAp && kFirebaseEnabled)  // Adiciona verificação
+  if (!pauseForAp)
   {
     ensureTimeSynced();
-    processPendingLogs();
   }
 
   checkSchedules();
@@ -1549,9 +1355,6 @@ void loop()
 
   updateStatusLed();
   logWifiStatusChange();
-
-  if (!pauseForAp && kFirebaseEnabled)  // Adiciona verificação
-    logFirebaseStatusChange();
 
   delay(100);
 }

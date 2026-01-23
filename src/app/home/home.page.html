@@ -37,19 +37,10 @@
           <div class="flex flex-col gap-2 items-end">
             <div
               class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 border border-white/5 transition-all"
-              [ngClass]="{'border-green-500/50 bg-green-500/10': status?.wifiConnected}">
+              [ngClass]="{'border-green-500/50 bg-green-500/10': isConnectedToDevice}">
               <span class="text-[10px] font-bold text-white/80">Wi-Fi</span>
               <div class="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]"
-                [ngClass]="status?.wifiConnected ? 'bg-green-400 text-green-400 animate-pulse' : 'bg-red-500 text-red-500'">
-              </div>
-            </div>
-
-            <div
-              class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 border border-white/5 transition-all"
-              [ngClass]="{'border-blue-500/50 bg-blue-500/10': status?.firebaseReady}">
-              <span class="text-[10px] font-bold text-white/80">Cloud</span>
-              <div class="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]"
-                [ngClass]="status?.firebaseReady ? 'bg-blue-400 text-blue-400 animate-pulse' : 'bg-white/20 text-white'">
+                [ngClass]="isConnectedToDevice ? 'bg-green-400 text-green-400 animate-pulse' : 'bg-red-500 text-red-500'">
               </div>
             </div>
           </div>
@@ -130,11 +121,6 @@
           <li>Configure suas bombas</li>
         </ol>
       </div>
-
-      <button (click)="openConfigPreview()"
-        class="w-full py-3 text-xs text-white/40 hover:text-white transition-colors">
-        Ver layout da configuração (Preview)
-      </button>
     </div>
   </div>
 </ion-content>

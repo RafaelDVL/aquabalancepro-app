@@ -135,7 +135,7 @@ export class CalibracaoPage {
     }
     try {
       await firstValueFrom(
-        this.doser.testDose(this.quickTestBombId, this.quickTestDose, 'Teste rapido'),
+        this.doser.testDose(this.quickTestBombId, this.quickTestDose, 'Teste'),
       );
       this.toastMessage = 'Teste enviado para a bomba.';
       this.toastOpen = true;

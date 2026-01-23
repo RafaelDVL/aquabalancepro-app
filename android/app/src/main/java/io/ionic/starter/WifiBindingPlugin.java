@@ -1,4 +1,4 @@
-package aquabalancepro-app;
+package io.ionic.starter;
 
 import android.content.Context;
 import android.net.ConnectivityManager;

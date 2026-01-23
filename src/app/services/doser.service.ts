@@ -27,7 +27,6 @@ export interface DeviceStatus {
   wifiIp?: string;
   apSsid?: string;
   apIp?: string;
-  firebaseReady?: boolean;
 }
 
 export interface ApiStatusResponse {
@@ -36,6 +35,7 @@ export interface ApiStatusResponse {
 }
 
 export interface LogEntry {
+  bombaId: number;
   timestamp: string;
   bomba: string;
   dosagem: number;
@@ -46,7 +46,6 @@ interface RawStatus {
   time?: string;
   wifi?: { connected?: boolean; rssi?: number; ip?: string };
   ap?: { ssid?: string; ip?: string };
-  firebase?: { ready?: boolean };
 }
 
 interface RawSchedule {
@@ -93,7 +92,6 @@ export class DoserService {
           wifiIp: raw.wifi?.ip,
           apSsid: raw.ap?.ssid,
           apIp: raw.ap?.ip,
-          firebaseReady: raw.firebase?.ready ?? false,
         })),
       ),
     );
@@ -228,17 +226,6 @@ export class DoserService {
 
     return payload;
   }
-
-  // Adicione este método no DoserService
-saveFcmToken(token: string): Observable<ApiStatusResponse> {
-  return this.withWifiBinding(
-    this.http.post<ApiStatusResponse>(
-      `${this.apiUrl}/fcm-token`,
-      JSON.stringify({ token: token }),
-      { headers: this.plainJsonHeaders }
-    )
-  );
-}
 
   private formatDateTime(date: Date): string {
     const day = String(date.getDate()).padStart(2, '0');
