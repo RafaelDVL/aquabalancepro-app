@@ -1,0 +1,15 @@
+:host {
+  /* Efeito de brilho na borda superior (opcional, mas fica lindo) */
+  .backdrop-blur-md {
+    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  /* Remove o fundo padrão do ion-accordion que as vezes atrapalha o vidro */
+  ion-accordion {
+    background: transparent !important;
+  }
+
+  ion-accordion-group {
+    background: transparent !important;
+  }
+}

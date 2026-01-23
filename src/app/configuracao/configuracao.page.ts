@@ -2,6 +2,8 @@ import { CommonModule } from '@angular/common';
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { addIcons } from 'ionicons';
+import { power, cloudUploadOutline, beakerOutline  } from 'ionicons/icons';
 import {
   IonAccordion,
   IonAccordionGroup,
@@ -15,10 +17,10 @@ import {
   IonSegmentButton,
   IonTitle,
   IonToast,
-  IonToolbar,
-} from '@ionic/angular/standalone';
+  IonToolbar } from '@ionic/angular/standalone';
 import { firstValueFrom } from 'rxjs';
 import { BombConfig, DoserService, ScheduleConfig } from '../services/doser.service';
+
 
 interface ScheduleForm extends ScheduleConfig {
   timeValue: string;
@@ -36,6 +38,7 @@ const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
 @Component({
   selector: 'app-configuracao',
   templateUrl: './configuracao.page.html',
+  styleUrls: ['./configuracao.page.scss'],
   imports: [
     CommonModule,
     FormsModule,
@@ -66,6 +69,7 @@ export class ConfiguracaoPage {
   readonly doseMin = 0.5;
   readonly doseMax = 15;
   readonly doseStep = 0.5;
+  readonly dosagePresets = [0.5, 1, 3, 5, 10, 15];
   private readonly colorStorageKey = 'abp-bomb-colors';
   private readonly defaultColors: Record<number, string> = {
     1: '#2DD4BF',
@@ -83,9 +87,13 @@ export class ConfiguracaoPage {
     '#A855F7',
     '#3B82F6',
     '#6366F1',
+    '#fc5be6',
+    '#ff0000',
   ];
 
-  constructor(private readonly doser: DoserService, private readonly router: Router) {}
+  constructor(private readonly doser: DoserService, private readonly router: Router) {
+    addIcons({ power, cloudUploadOutline, beakerOutline });
+  }
 
   async ionViewWillEnter(): Promise<void> {
     await this.loadConfig();

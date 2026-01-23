@@ -10,21 +10,30 @@ import {
   IonToast,
   IonToolbar,
 } from '@ionic/angular/standalone';
+
+import { addIcons } from 'ionicons';
+// Importação dos ícones usados na nova Home moderna
+import {
+  settingsSharp,
+  receiptOutline,
+  wifi,
+  cloud,
+  timeOutline,
+  refreshCircle
+} from 'ionicons/icons';
+
 import { firstValueFrom } from 'rxjs';
 import { DeviceStatus, DoserService } from '../services/doser.service';
 
 @Component({
   selector: 'app-home',
   templateUrl: 'home.page.html',
+  standalone: true, // <--- ADICIONEI ISTO AQUI (Importante!)
   imports: [
     CommonModule,
     IonContent,
-    IonHeader,
     IonIcon,
     IonSpinner,
-    IonTitle,
-    IonToast,
-    IonToolbar,
   ],
 })
 export class HomePage {
@@ -35,7 +44,17 @@ export class HomePage {
   toastMessage = '';
   toastOpen = false;
 
-  constructor(private readonly doser: DoserService, private readonly router: Router) {}
+  constructor(private readonly doser: DoserService, private readonly router: Router) {
+    // Registra os ícones para que apareçam no HTML
+    addIcons({
+      settingsSharp,
+      receiptOutline,
+      wifi,
+      cloud,
+      timeOutline,
+      refreshCircle
+    });
+  }
 
   ionViewWillEnter(): void {
     void this.refreshStatus();
@@ -49,10 +68,10 @@ export class HomePage {
       if (this.status?.apSsid) {
         this.deviceName = this.status.apSsid;
       }
+
       this.canConfigure = true;
     } catch (error) {
-      this.toastMessage =
-        error instanceof Error ? error.message : 'Falha ao consultar o dispositivo.';
+      this.toastMessage = error instanceof Error ? error.message : 'Falha ao consultar o dispositivo.';
       this.toastOpen = true;
     } finally {
       this.isLoading = false;
@@ -63,8 +82,7 @@ export class HomePage {
     try {
       await firstValueFrom(this.doser.setTime(new Date()));
     } catch (error) {
-      this.toastMessage =
-        error instanceof Error ? error.message : 'Falha ao sincronizar o horario.';
+      this.toastMessage = error instanceof Error ? error.message : 'Falha ao sincronizar o horario.';
       this.toastOpen = true;
     } finally {
       await this.router.navigateByUrl('/configuracao');

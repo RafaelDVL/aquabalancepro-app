@@ -1,102 +1,140 @@
-<ion-header>
-  <ion-toolbar class="bg-transparent text-neon-cyan" style="--background: transparent;">
-    <ion-title class="font-bold">AquaBalance Pro</ion-title>
-  </ion-toolbar>
-</ion-header>
+<ion-content [fullscreen]="true" class="relative">
+  <div class="fixed inset-0 w-full h-full z-0 pointer-events-none">
+    <img src="assets/Summer Under The Sea Wallpaper Art.jpg" class="w-full h-full object-cover" alt="Background">
+    <div class="absolute inset-0 bg-gradient-to-b from-[#05161A]/60 via-[#05161A]/80 to-[#05161A]"></div>
+  </div>
 
-<ion-content class="bg-ocean-dark text-text-main" style="--background: #05161A;">
-  <section class="px-5 pt-6 pb-4 space-y-4">
-    <div class="bg-ocean-card rounded-2xl shadow-lg border border-white/5 p-5">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <p class="text-xs uppercase tracking-wide text-text-muted">Dispositivo</p>
-          <h2 class="text-lg font-bold text-text-main">{{ deviceName }}</h2>
-          <p class="text-xs text-text-muted mt-1">
-            Horario: {{ status?.time || 'aguardando atualizacao' }}
-          </p>
-          <p class="text-xs text-text-muted" *ngIf="status?.apIp">
-            AP: {{ status?.apIp }}
-          </p>
+  <div class="relative z-10 flex flex-col min-h-full px-6 pt-12 pb-8">
+
+    <div class="mb-8 animate-fade-in-down">
+      <h1 class="text-4xl font-black text-white tracking-tighter drop-shadow-lg">
+        Aqua<span class="text-neon-cyan">Balance</span>
+      </h1>
+      <p class="text-white/70 text-sm font-medium tracking-wide ml-1">
+        Precision Reef Dosing
+      </p>
+    </div>
+
+    <div
+      class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl mb-8 relative overflow-hidden group">
+      <div
+        class="absolute -top-10 -right-10 w-32 h-32 bg-neon-cyan/20 rounded-full blur-3xl group-hover:bg-neon-cyan/30 transition-all duration-700">
+      </div>
+
+      <div class="relative z-10">
+        <div class="flex justify-between items-start mb-4">
+          <div>
+            <p class="text-[10px] font-bold uppercase tracking-widest text-white/50 mb-1">Dispositivo Conectado</p>
+            <h2 class="text-2xl font-bold text-white">{{ deviceName }}</h2>
+            <div class="flex items-center gap-2 mt-1">
+              <ion-icon name="time-outline" class="text-neon-cyan text-sm"></ion-icon>
+              <span class="text-xs text-white/80 font-mono">
+                {{ status?.time || '--:--' }}
+              </span>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-2 items-end">
+            <div
+              class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 border border-white/5 transition-all"
+              [ngClass]="{'border-green-500/50 bg-green-500/10': status?.wifiConnected}">
+              <span class="text-[10px] font-bold text-white/80">Wi-Fi</span>
+              <div class="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]"
+                [ngClass]="status?.wifiConnected ? 'bg-green-400 text-green-400 animate-pulse' : 'bg-red-500 text-red-500'">
+              </div>
+            </div>
+
+            <div
+              class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 border border-white/5 transition-all"
+              [ngClass]="{'border-blue-500/50 bg-blue-500/10': status?.firebaseReady}">
+              <span class="text-[10px] font-bold text-white/80">Cloud</span>
+              <div class="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]"
+                [ngClass]="status?.firebaseReady ? 'bg-blue-400 text-blue-400 animate-pulse' : 'bg-white/20 text-white'">
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="flex flex-col items-end gap-2">
-          <span
-            class="flex items-center gap-2 rounded-full px-3 py-1 text-xs"
-            [class]="
-              status?.wifiConnected
-                ? 'bg-neon-cyan text-ocean-dark font-bold shadow-neon'
-                : 'border border-ocean-light text-text-muted'
-            "
-          >
-            <ion-icon name="wifi"></ion-icon>
-            Wi-Fi
-          </span>
-          <span
-            class="flex items-center gap-2 rounded-full px-3 py-1 text-xs"
-            [class]="
-              status?.firebaseReady
-                ? 'bg-neon-cyan text-ocean-dark font-bold shadow-neon'
-                : 'border border-ocean-light text-text-muted'
-            "
-          >
-            <ion-icon name="cloud"></ion-icon>
-            Cloud
-          </span>
+
+        <div *ngIf="status?.apIp"
+          class="inline-flex items-center gap-2 px-3 py-1 bg-white/5 rounded-lg border border-white/5">
+          <ion-icon name="wifi" class="text-neon-cyan text-xs"></ion-icon>
+          <span class="text-xs font-mono text-white/80">{{ status?.apIp }}</span>
         </div>
       </div>
     </div>
 
-    <div class="bg-ocean-card rounded-2xl shadow-lg border border-white/5 p-5">
-      <h3 class="text-base font-semibold text-text-main">Passo a passo</h3>
-      <ol class="mt-3 space-y-2 text-sm text-text-muted list-decimal list-inside">
-        <li>Conecte o celular ao Wi-Fi do ESP32.</li>
-        <li>Toque em "Atualizar status".</li>
-        <li>Abra o dispositivo para configurar as bombas.</li>
-      </ol>
+    <div class="grid grid-cols-2 gap-4 mb-6">
+
+      <button (click)="refreshStatus()" [disabled]="isLoading" class="col-span-2 relative h-24 rounded-2xl overflow-hidden transition-all duration-300 active:scale-95 group
+                 border border-neon-cyan/30 bg-neon-cyan/10 backdrop-blur-md
+                 hover:bg-neon-cyan/20 hover:border-neon-cyan/60 hover:shadow-[0_0_25px_rgba(34,211,238,0.15)]
+                 disabled:opacity-50 disabled:cursor-not-allowed">
+
+        <div
+          class="absolute -inset-full top-0 block h-full w-1/2 -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-20 group-hover:animate-shine">
+        </div>
+
+        <div class="flex items-center justify-center gap-4 relative z-10 h-full">
+
+          <div class="relative">
+            <ion-spinner *ngIf="isLoading" name="crescent" class="text-neon-cyan w-10 h-10"></ion-spinner>
+
+            <div *ngIf="!isLoading"
+              class="w-12 h-12 rounded-full bg-neon-cyan/10 border border-neon-cyan/20 flex items-center justify-center group-hover:scale-110 group-hover:bg-neon-cyan/20 transition-all duration-300">
+              <ion-icon name="refresh-circle"
+                class="text-3xl text-neon-cyan drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]"></ion-icon>
+            </div>
+          </div>
+
+          <div class="flex flex-col items-start text-left">
+            <span class="text-lg font-bold text-white tracking-wide group-hover:text-neon-cyan transition-colors">
+              {{ isLoading ? 'Sincronizando...' : 'Atualizar Status' }}
+            </span>
+            <span class="text-xs text-white/50 font-medium">
+              Conectar ao ESP32
+            </span>
+          </div>
+
+        </div>
+      </button>
+
+      <button *ngIf="canConfigure" (click)="openConfig()"
+        class="bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 hover:border-white/20 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 active:scale-95 transition-all h-36 group shadow-lg">
+        <div
+          class="w-14 h-14 rounded-full bg-gradient-to-br from-white/5 to-white/0 border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:border-neon-cyan/50 transition-all duration-300">
+          <ion-icon name="settings-sharp" class="text-2xl text-neon-cyan/80 group-hover:text-neon-cyan"></ion-icon>
+        </div>
+        <span class="text-sm font-bold text-white/90 group-hover:text-white">Configurar</span>
+      </button>
+
+      <button *ngIf="canConfigure" (click)="openLogs()"
+        class="bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 hover:border-white/20 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 active:scale-95 transition-all h-36 group shadow-lg">
+        <div
+          class="w-14 h-14 rounded-full bg-gradient-to-br from-white/5 to-white/0 border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:border-purple-400/50 transition-all duration-300">
+          <ion-icon name="receipt-outline" class="text-2xl text-purple-400/80 group-hover:text-purple-400"></ion-icon>
+        </div>
+        <span class="text-sm font-bold text-white/90 group-hover:text-white">Logs</span>
+      </button>
     </div>
-  </section>
 
-  <div class="px-5 pb-12 space-y-4">
-    <button
-      type="button"
-      class="w-full bg-gradient-to-r from-teal-dim to-neon-cyan text-white font-bold rounded-xl py-4 shadow-lg active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed"
-      (click)="refreshStatus()"
-      [disabled]="isLoading"
-    >
-      <ion-spinner *ngIf="isLoading" name="dots" class="text-white"></ion-spinner>
-      <span *ngIf="!isLoading">Atualizar status</span>
-    </button>
+    <div class="mt-auto space-y-4">
+      <div class="bg-black/40 rounded-xl p-4 border border-white/5">
+        <div class="flex items-center gap-3 mb-2">
+          <div class="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold text-white">?
+          </div>
+          <span class="text-sm font-bold text-white/90">Guia Rápido</span>
+        </div>
+        <ol class="text-xs text-white/60 space-y-1 ml-9 list-disc">
+          <li>Conecte no Wi-Fi do ESP32</li>
+          <li>Toque em <b>Atualizar Status</b></li>
+          <li>Configure suas bombas</li>
+        </ol>
+      </div>
 
-    <button
-      type="button"
-      class="w-full border border-neon-cyan text-neon-cyan rounded-xl py-3"
-      *ngIf="canConfigure"
-      (click)="openConfig()"
-    >
-      Configurar {{ deviceName }}
-    </button>
-
-    <button
-      type="button"
-      class="w-full border border-neon-cyan text-neon-cyan rounded-xl py-3"
-      *ngIf="canConfigure"
-      (click)="openLogs()"
-    >
-      Log de registros
-    </button>
-
-    <button
-      type="button"
-      class="w-full border border-ocean-light text-text-muted rounded-xl py-3"
-      (click)="openConfigPreview()"
-    >
-      Ver layout da configuracao
-    </button>
+      <button (click)="openConfigPreview()"
+        class="w-full py-3 text-xs text-white/40 hover:text-white transition-colors">
+        Ver layout da configuração (Preview)
+      </button>
+    </div>
   </div>
-
-  <ion-toast
-    [isOpen]="toastOpen"
-    [message]="toastMessage"
-    duration="2200"
-    (didDismiss)="toastOpen = false"
-  ></ion-toast>
 </ion-content>

@@ -1,6 +1,7 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable, map } from 'rxjs';
+import { Observable, catchError, from, map, of, switchMap } from 'rxjs';
+import { WifiBindingService } from './wifi-binding.service';
 
 export interface ScheduleConfig {
   id: number;
@@ -77,69 +78,93 @@ export class DoserService {
     'Content-Type': 'text/plain',
   });
 
-  constructor(private readonly http: HttpClient) {}
+  constructor(
+    private readonly http: HttpClient,
+    private readonly wifiBinding: WifiBindingService,
+  ) {}
 
   getStatus(): Observable<DeviceStatus> {
-    return this.http.get<RawStatus>(`${this.apiUrl}/status`).pipe(
-      map((raw) => ({
-        time: raw.time,
-        wifiConnected: raw.wifi?.connected ?? false,
-        wifiRssi: raw.wifi?.rssi,
-        wifiIp: raw.wifi?.ip,
-        apSsid: raw.ap?.ssid,
-        apIp: raw.ap?.ip,
-        firebaseReady: raw.firebase?.ready ?? false,
-      })),
+    return this.withWifiBinding(
+      this.http.get<RawStatus>(`${this.apiUrl}/status`).pipe(
+        map((raw) => ({
+          time: raw.time,
+          wifiConnected: raw.wifi?.connected ?? false,
+          wifiRssi: raw.wifi?.rssi,
+          wifiIp: raw.wifi?.ip,
+          apSsid: raw.ap?.ssid,
+          apIp: raw.ap?.ip,
+          firebaseReady: raw.firebase?.ready ?? false,
+        })),
+      ),
     );
   }
 
   getConfig(): Observable<BombConfig[]> {
-    return this.http.get<RawConfig>(`${this.apiUrl}/config`).pipe(
-      map((raw) => this.mapBombs(raw)),
+    return this.withWifiBinding(
+      this.http.get<RawConfig>(`${this.apiUrl}/config`).pipe(
+        map((raw) => this.mapBombs(raw)),
+      ),
     );
   }
 
   saveConfig(bombs: BombConfig[]): Observable<ApiStatusResponse> {
     const payload = this.buildConfigPayload(bombs);
-    return this.http.post<ApiStatusResponse>(
-      `${this.apiUrl}/config`,
-      JSON.stringify(payload),
-      { headers: this.plainJsonHeaders },
+    return this.withWifiBinding(
+      this.http.post<ApiStatusResponse>(
+        `${this.apiUrl}/config`,
+        JSON.stringify(payload),
+        { headers: this.plainJsonHeaders },
+      ),
     );
   }
 
   setTime(date: Date): Observable<ApiStatusResponse> {
-    return this.http.post<ApiStatusResponse>(
-      `${this.apiUrl}/time`,
-      JSON.stringify({ time: this.formatDateTime(date) }),
-      { headers: this.plainJsonHeaders },
+    return this.withWifiBinding(
+      this.http.post<ApiStatusResponse>(
+        `${this.apiUrl}/time`,
+        JSON.stringify({ time: this.formatDateTime(date) }),
+        { headers: this.plainJsonHeaders },
+      ),
     );
   }
 
   testDose(bombId: number, dosagem: number, origem?: string): Observable<ApiStatusResponse> {
-    return this.http.post<ApiStatusResponse>(
-      `${this.apiUrl}/dose`,
-      JSON.stringify({ bomb: bombId, dosagem, origem }),
-      { headers: this.plainJsonHeaders },
+    return this.withWifiBinding(
+      this.http.post<ApiStatusResponse>(
+        `${this.apiUrl}/dose`,
+        JSON.stringify({ bomb: bombId, dosagem, origem }),
+        { headers: this.plainJsonHeaders },
+      ),
     );
   }
 
   getLogs(): Observable<LogEntry[]> {
-    return this.http.get<LogEntry[] | { logs?: LogEntry[] }>(`${this.apiUrl}/logs`).pipe(
-      map((response) => {
-        if (Array.isArray(response)) {
-          return response;
-        }
-        if (response && Array.isArray(response.logs)) {
-          return response.logs;
-        }
-        return [];
-      }),
+    return this.withWifiBinding(
+      this.http.get<LogEntry[] | { logs?: LogEntry[] }>(`${this.apiUrl}/logs`).pipe(
+        map((response) => {
+          if (Array.isArray(response)) {
+            return response;
+          }
+          if (response && Array.isArray(response.logs)) {
+            return response.logs;
+          }
+          return [];
+        }),
+      ),
     );
   }
 
   clearLogs(): Observable<ApiStatusResponse> {
-    return this.http.delete<ApiStatusResponse>(`${this.apiUrl}/logs`);
+    return this.withWifiBinding(
+      this.http.delete<ApiStatusResponse>(`${this.apiUrl}/logs`),
+    );
+  }
+
+  private withWifiBinding<T>(request: Observable<T>): Observable<T> {
+    return from(this.wifiBinding.bindToWifi()).pipe(
+      catchError(() => of(null)),
+      switchMap(() => request),
+    );
   }
 
   private mapBombs(raw: RawConfig): BombConfig[] {
@@ -203,6 +228,17 @@ export class DoserService {
 
     return payload;
   }
+
+  // Adicione este método no DoserService
+saveFcmToken(token: string): Observable<ApiStatusResponse> {
+  return this.withWifiBinding(
+    this.http.post<ApiStatusResponse>(
+      `${this.apiUrl}/fcm-token`,
+      JSON.stringify({ token: token }),
+      { headers: this.plainJsonHeaders }
+    )
+  );
+}
 
   private formatDateTime(date: Date): string {
     const day = String(date.getDate()).padStart(2, '0');
