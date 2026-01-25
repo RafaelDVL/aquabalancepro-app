@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
+import { ViewWillEnter, ViewWillLeave } from '@ionic/angular/standalone';
 import {
   IonBackButton,
   IonButtons,
@@ -85,6 +86,7 @@ interface DailyDataPoint {
   origem: string;
   scheduled: boolean;
   isExecuted?: boolean;
+  scheduledTime?: string; // New: stores original scheduled time if merged
 }
 
 @Component({
@@ -102,7 +104,7 @@ interface DailyDataPoint {
     IonToolbar,
   ],
 })
-export class AnalyticsPage implements OnInit, AfterViewInit {
+export class AnalyticsPage implements ViewWillEnter, ViewWillLeave {
   @ViewChild('dailyCanvas', { static: false }) dailyCanvas?: ElementRef<HTMLCanvasElement>;
 
   loading = false;
@@ -121,15 +123,20 @@ export class AnalyticsPage implements OnInit, AfterViewInit {
 
   constructor(private readonly doser: DoserService) {}
 
-  async ngOnInit(): Promise<void> {
+  async ionViewWillEnter(): Promise<void> {
     this.storedColors = this.getStoredColors();
     await this.loadData();
-  }
-
-  ngAfterViewInit(): void {
+    // Pequeno delay para garantir que o canvas esteja renderizado no DOM
     setTimeout(() => {
       this.createCharts();
     }, 100);
+  }
+
+  ionViewWillLeave(): void {
+    if (this.dailyChart) {
+      this.dailyChart.destroy();
+      this.dailyChart = undefined;
+    }
   }
 
   async loadData(): Promise<void> {
@@ -142,6 +149,8 @@ export class AnalyticsPage implements OnInit, AfterViewInit {
       ]);
       this.logs = logs;
       this.bombs = config;
+      // Se o gráfico já existir (re-load manual), atualiza.
+      // Caso contrário, será criado no ionViewWillEnter/setTimeout
       if (this.dailyChart) {
         this.updateCharts();
       }
@@ -162,13 +171,18 @@ export class AnalyticsPage implements OnInit, AfterViewInit {
 
   private createDailyChart(): void {
     if (!this.dailyCanvas?.nativeElement) return;
+    
+    // Garantir limpeza anterior
+    if (this.dailyChart) {
+      this.dailyChart.destroy();
+      this.dailyChart = undefined;
+    }
 
     const ctx = this.dailyCanvas.nativeElement.getContext('2d');
     if (!ctx) return;
 
     const data = this.getDailyData();
 
-    // Agrupar dados por bomba (sem separar programado/executado)
     const datasets: any[] = [];
     const bombIds = [...new Set(data.map(d => d.bombId))].sort((a, b) => a - b);
 
@@ -183,6 +197,8 @@ export class AnalyticsPage implements OnInit, AfterViewInit {
             dosagem: d.dosagem,
             origem: d.origem,
             scheduled: d.scheduled,
+            scheduledTime: d.scheduledTime, // Pass through
+            isExecuted: d.isExecuted
           };
           return point;
         }),
@@ -229,7 +245,17 @@ export class AnalyticsPage implements OnInit, AfterViewInit {
               label: (context: any) => {
                 const point = context.raw as any;
                 if (!point) return '';
-                return `${point.origem} - ${point.dosagem.toFixed(2)} ml às ${String(Math.floor(point.x)).padStart(2, '0')}:${String(Math.round((point.x % 1) * 60)).padStart(2, '0')}`;
+
+                const hour = Math.floor(point.x);
+                const minute = Math.round((point.x % 1) * 60);
+                const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+
+                if (point.scheduledTime) {
+                  return `Programado: ${point.scheduledTime} - Executado: ${timeStr} (${point.dosagem.toFixed(1)}ml)`;
+                }
+                
+                const prefix = point.scheduled ? 'Programado' : 'Executado';
+                return `${prefix}: ${timeStr} (${point.dosagem.toFixed(1)}ml) - ${point.origem}`;
               },
             },
           },
@@ -254,7 +280,6 @@ export class AnalyticsPage implements OnInit, AfterViewInit {
               stepSize: 1,
               color: '#94a3b8',
               callback: (value: any) => {
-                // Mostrar apenas círculos coloridos no eixo Y
                 const bombId = value as number;
                 if (bombIds.includes(bombId)) {
                   return '● ';
@@ -277,7 +302,7 @@ export class AnalyticsPage implements OnInit, AfterViewInit {
     const data = this.getDailyData();
     const bombIds = [...new Set(data.map(d => d.bombId))].sort((a, b) => a - b);
 
-    // Reconstruir datasets com novos dados
+    // Reconstruir datasets
     this.dailyChart.data.datasets = bombIds.map((bombId) => {
       const bombData = data.filter(d => d.bombId === bombId);
       return {
@@ -289,6 +314,8 @@ export class AnalyticsPage implements OnInit, AfterViewInit {
             dosagem: d.dosagem,
             origem: d.origem,
             scheduled: d.scheduled,
+            scheduledTime: d.scheduledTime,
+            isExecuted: d.isExecuted
           };
           return point;
         }),
@@ -310,8 +337,8 @@ export class AnalyticsPage implements OnInit, AfterViewInit {
     const today = new Date();
     const todayStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
 
-    // Logs executados hoje (excluindo testes)
-    const executed = this.logs
+    // 1. Obter executados hoje
+    const executed: DailyDataPoint[] = this.logs
       .filter((log) => log.timestamp.startsWith(todayStr) && log.origem.toLowerCase() !== 'teste')
       .map((log) => {
         const [, timePart] = log.timestamp.split(' ');
@@ -327,7 +354,7 @@ export class AnalyticsPage implements OnInit, AfterViewInit {
         };
       });
 
-    // Schedules programados para hoje (que não foram testes)
+    // 2. Obter programados para hoje
     const dayOfWeek = today.getDay();
     const scheduled: DailyDataPoint[] = [];
     this.bombs.forEach((bomb) => {
@@ -345,7 +372,47 @@ export class AnalyticsPage implements OnInit, AfterViewInit {
       });
     });
 
-    return [...executed, ...scheduled];
+    // 3. Mesclar (Matching)
+    // Se houver um executado com mesmo BombID e Dosagem, e horário PRÓXIMO (+/- 15 min),
+    // consideramos que o programado JÁ FOI executado.
+    // Marcamos o executado com "scheduledTime" e REMOVEMOS o scheduled da lista.
+
+    const finalScheduled: DailyDataPoint[] = [];
+
+    scheduled.forEach((sched) => {
+      const schedTimeVal = sched.hour * 60 + sched.minute;
+
+      // Tentar encontrar um executado correspondente
+      const matchIndex = executed.findIndex((exec) => {
+        // Já foi mergeado?
+        if (exec.scheduledTime) return false;
+        
+        // Mesma bomba e dosagem aprox (float compare)
+        if (exec.bombId !== sched.bombId) return false;
+        if (Math.abs(exec.dosagem - sched.dosagem) > 0.05) return false;
+
+        // Tolerância de tempo (ex: +/- 30 minutos)
+        // Isso cobre casos onde o relógio do ESP estava levemente adiantado/atrasado ou delay de rede
+        const execTimeVal = exec.hour * 60 + exec.minute;
+        const diff = Math.abs(execTimeVal - schedTimeVal);
+        return diff <= 30; 
+      });
+
+      if (matchIndex !== -1) {
+        // Encontrou correspondência!
+        // Atualiza o executado com infos do programado
+        const scheduledTimeStr = `${String(sched.hour).padStart(2,'0')}:${String(sched.minute).padStart(2,'0')}`;
+        executed[matchIndex].scheduledTime = scheduledTimeStr;
+        // NÃO adiciona ao finalScheduled pois já está representado no executado
+      } else {
+        // Não encontrou, então ainda deve acontecer (ou falhou/foi perdido)
+        finalScheduled.push(sched);
+      }
+    });
+
+    // IMPORTANTE: Retornar [...scheduled, ...executed]
+    // Isso garante que os 'executed' (Losangos) sejam desenhados POR ÚLTIMO (em cima)
+    return [...finalScheduled, ...executed];
   }
 
   private getPumpColor(id: number): string {
