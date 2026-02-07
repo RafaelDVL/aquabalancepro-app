@@ -12,4 +12,18 @@
   ion-accordion-group {
     background: transparent !important;
   }
+
+  .schedule-slider {
+    overflow: hidden;
+  }
+
+  .schedule-track {
+    display: flex;
+    transition: transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+    will-change: transform;
+  }
+
+  .schedule-panel {
+    min-width: 100%;
+  }
 }

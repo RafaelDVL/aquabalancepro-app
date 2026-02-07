@@ -13,6 +13,7 @@ import {
   IonHeader,
   IonInput,
   IonIcon,
+  IonToggle,
   IonSegment,
   IonSegmentButton,
   IonTitle,
@@ -50,6 +51,7 @@ const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
     IonHeader,
     IonInput,
     IonIcon,
+    IonToggle,
     IonSegment,
     IonSegmentButton,
     IonTitle,
@@ -117,6 +119,10 @@ export class ConfiguracaoPage {
 
   toggleDay(schedule: ScheduleForm, index: number): void {
     schedule.diasSemana[index] = !schedule.diasSemana[index];
+  }
+
+  setScheduleStatus(schedule: ScheduleForm, checked: boolean): void {
+    schedule.status = Boolean(checked);
   }
 
   activeCount(bomb: BombForm): number {
