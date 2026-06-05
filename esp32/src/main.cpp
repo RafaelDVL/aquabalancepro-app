@@ -3,7 +3,6 @@
 #include <RTClib.h>
 #include <WiFi.h>
 #include <Preferences.h>
-#include <FS.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <AsyncTCP.h>
@@ -16,16 +15,21 @@
 #define BOMBA1_PIN 4
 #define BOMBA2_PIN 5
 #define BOMBA3_PIN 6
+#define BOMBA4_PIN 7
 #define LED_PIN 48
 #define LED_COUNT 1
 #define I2C_SDA 21
 #define I2C_SCL 20
 
-#define MAX_PUMP_QUEUE 10
-#define CONFIG_DOC_SIZE 8192
+#define BOMBA_COUNT 4
+#define SCHEDULE_COUNT 3
+#define MAX_PUMP_QUEUE 14
+#define CONFIG_DOC_SIZE 10240
 #define LOG_LIMIT 300
 #define LOG_FILE "/logs.jsonl"
 #define LOG_TEMP_FILE "/logs.tmp"
+
+const uint8_t PUMP_PINS[BOMBA_COUNT] = {BOMBA1_PIN, BOMBA2_PIN, BOMBA3_PIN, BOMBA4_PIN};
 
 // --- Wi-Fi ---
 const char *AP_SSID = "AquaBalancePro";
@@ -35,6 +39,13 @@ const char *AP_PASSWORD = "12345678";
 const char *STA_SSID = "<SEU_SSID>";
 const char *STA_PASSWORD = "<SUA_SENHA>";
 constexpr bool kApOnlyMode = false;
+
+bool isStaConfigured()
+{
+  return !kApOnlyMode &&
+         strcmp(STA_SSID, "<SEU_SSID>") != 0 &&
+         strlen(STA_SSID) > 0;
+}
 
 // --- Objetos Globais ---
 RTC_DS3231 rtc;
@@ -82,7 +93,7 @@ struct Bomb
   String name;
   float calibrCoef;
   float quantidadeEstoque;
-  Schedule schedules[3];
+  Schedule schedules[SCHEDULE_COUNT];
 
   Bomb()
   {
@@ -92,7 +103,7 @@ struct Bomb
   }
 };
 
-Bomb bombas[3];
+Bomb bombas[BOMBA_COUNT];
 
 struct PumpJob
 {
@@ -134,7 +145,7 @@ bool noNetBlinkActive = false;
 uint32_t currentLedColor = 0;
 
 // =========================================================
-// Forward declarations (PROTÓTIPOS) — corrigem “scope” em .cpp
+// Forward declarations
 // =========================================================
 String formatTimestamp(const DateTime &now);
 const char *wifiStatusToString(wl_status_t status);
@@ -148,6 +159,7 @@ void enableSta();
 void disableSta();
 void setupWifi();
 void ensureStaWifi();
+void ensureApIsUp();
 
 // Tempo / NTP
 void ensureTimeSynced();
@@ -286,7 +298,7 @@ void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info)
 void setupWifi()
 {
   WiFi.onEvent(onWiFiEvent);
-  WiFi.mode(kApOnlyMode ? WIFI_AP : WIFI_AP_STA);
+  WiFi.mode(isStaConfigured() ? WIFI_AP_STA : WIFI_AP);
   WiFi.setSleep(false);
 
   WiFi.softAPConfig(IPAddress(192, 168, 4, 1),
@@ -301,8 +313,8 @@ void setupWifi()
 
 void enableSta()
 {
-  if (kApOnlyMode || staEnabled) return;
-  WiFi.setAutoReconnect(true);
+  if (staEnabled) return;
+  if (!isStaConfigured()) return;
   WiFi.persistent(false);
   WiFi.begin(STA_SSID, STA_PASSWORD);
   Serial.printf("[wifi] STA Habilitado. Tentando: %s\n", STA_SSID);
@@ -312,6 +324,7 @@ void enableSta()
 void disableSta()
 {
   if (!staEnabled) return;
+  if (!isStaConfigured()) return;
   Serial.println("[wifi] STA Pausado (Cliente AP detectado)");
   WiFi.setAutoReconnect(false);
   WiFi.disconnect();
@@ -330,6 +343,7 @@ void applyApPriority()
 
 void ensureStaWifi()
 {
+  if (!isStaConfigured()) return;
   if (shouldPauseForAp()) return;
   if (!staEnabled) return;
   if (WiFi.status() == WL_CONNECTED) return;
@@ -339,8 +353,19 @@ void ensureStaWifi()
 
   lastWifiAttempt = millis();
   Serial.printf("[wifi] Tentando reconectar STA: %s...\n", STA_SSID);
-  WiFi.disconnect();
-  WiFi.begin(STA_SSID, STA_PASSWORD);
+  WiFi.reconnect();
+}
+
+void ensureApIsUp()
+{
+  if (WiFi.softAPIP().toString() == "0.0.0.0")
+  {
+    Serial.println("[wifi] AP caiu! Reiniciando AP...");
+    WiFi.softAPConfig(IPAddress(192, 168, 4, 1),
+                      IPAddress(192, 168, 4, 1),
+                      IPAddress(255, 255, 255, 0));
+    WiFi.softAP(AP_SSID, AP_PASSWORD);
+  }
 }
 
 void logWifiStatusChange()
@@ -366,6 +391,8 @@ void logWifiStatusChange()
 void ensureTimeSynced()
 {
   if (timeSynced || WiFi.status() != WL_CONNECTED) return;
+  if (!isStaConfigured()) return;
+  if (shouldPauseForAp()) return;
   if (millis() - lastTimeSyncAttempt < timeSyncInterval) return;
 
   lastTimeSyncAttempt = millis();
@@ -510,7 +537,7 @@ void handlePostDose(AsyncWebServerRequest *request)
   float dosagem = doc["dosagem"] | 0.0f;
   String origem = doc["origem"] | "Teste";
 
-  if (bomba < 1 || bomba > 3 || dosagem <= 0)
+  if (bomba < 1 || bomba > BOMBA_COUNT || dosagem <= 0)
   {
     Serial.println("[http] Dados invalidos para dosagem");
     request->send(400, "application/json", "{\"ok\":false,\"message\":\"dados invalidos\"}");
@@ -631,6 +658,8 @@ bool readRequestBody(AsyncWebServerRequest *request, String &body)
   if (request->_tempObject != nullptr)
   {
     body = String(static_cast<char *>(request->_tempObject));
+    free(request->_tempObject);
+    request->_tempObject = nullptr;
     return true;
   }
   return false;
@@ -766,7 +795,7 @@ bool initLogStorage()
 void appendLocalLog(int bombaIndex, float dosagem, const String &origem, const DateTime &timestamp)
 {
   if (!fsReady) return;
-  if (bombaIndex < 0 || bombaIndex >= 3) return;
+  if (bombaIndex < 0 || bombaIndex >= BOMBA_COUNT) return;
   if (dosagem <= 0) return;
 
   if (logCount >= LOG_LIMIT)
@@ -806,15 +835,13 @@ void appendLocalLog(int bombaIndex, float dosagem, const String &origem, const D
 // =========================================================
 void inicializarBombas()
 {
-  pinMode(BOMBA1_PIN, OUTPUT);
-  pinMode(BOMBA2_PIN, OUTPUT);
-  pinMode(BOMBA3_PIN, OUTPUT);
+  for (int i = 0; i < BOMBA_COUNT; i++)
+  {
+    pinMode(PUMP_PINS[i], OUTPUT);
+    digitalWrite(PUMP_PINS[i], LOW);
+  }
 
-  digitalWrite(BOMBA1_PIN, LOW);
-  digitalWrite(BOMBA2_PIN, LOW);
-  digitalWrite(BOMBA3_PIN, LOW);
-
-  Serial.println("[system] Pinos das bombas inicializados.");
+  Serial.printf("[system] %d bombas inicializadas.\n", BOMBA_COUNT);
 }
 
 void resetSchedule(Schedule &schedule)
@@ -834,7 +861,7 @@ String buildConfigJson()
 {
   JsonDocument doc;
 
-  for (int i = 0; i < 3; i++)
+  for (int i = 0; i < BOMBA_COUNT; i++)
   {
     String bombaKey = "bomb" + String(i + 1);
     JsonObject bomba = doc[bombaKey].to<JsonObject>();
@@ -844,7 +871,7 @@ String buildConfigJson()
     bomba["quantidadeEstoque"] = bombas[i].quantidadeEstoque;
 
     JsonArray schedules = bomba["schedules"].to<JsonArray>();
-    for (int j = 0; j < 3; j++)
+    for (int j = 0; j < SCHEDULE_COUNT; j++)
     {
       JsonObject schedule = schedules.add<JsonObject>();
       schedule["id"] = j + 1;
@@ -870,12 +897,12 @@ String buildConfigJson()
 void initDefaultBombasConfig()
 {
   Serial.println("[config] Inicializando configuracao padrao de bombas...");
-  for (int i = 0; i < 3; i++)
+  for (int i = 0; i < BOMBA_COUNT; i++)
   {
     bombas[i].name = "Bomba " + String(i + 1);
     bombas[i].calibrCoef = 1.0f;
     bombas[i].quantidadeEstoque = 1000.0f;
-    for (int j = 0; j < 3; j++)
+    for (int j = 0; j < SCHEDULE_COUNT; j++)
       resetSchedule(bombas[i].schedules[j]);
   }
   saveBombasConfig();
@@ -895,7 +922,7 @@ void parseBombData(int i, JsonObject bomba)
   if (bomba["schedules"])
   {
     JsonArray schedules = bomba["schedules"].as<JsonArray>();
-    for (int j = 0; j < 3; j++)
+    for (int j = 0; j < SCHEDULE_COUNT; j++)
     {
       JsonObject schedule = schedules[j];
       resetSchedule(bombas[i].schedules[j]);
@@ -925,12 +952,11 @@ void parseBombData(int i, JsonObject bomba)
   else
   {
     // Caso legado: sem "schedules"
-    resetSchedule(bombas[i].schedules[0]);
-    resetSchedule(bombas[i].schedules[1]);
-    resetSchedule(bombas[i].schedules[2]);
+    for (int j = 0; j < SCHEDULE_COUNT; j++)
+      resetSchedule(bombas[i].schedules[j]);
   }
 
-  for (int j = 0; j < 3; j++)
+  for (int j = 0; j < SCHEDULE_COUNT; j++)
     bombas[i].schedules[j].lastRunMinute = -1;
 }
 
@@ -955,7 +981,7 @@ void loadBombasConfig()
     return;
   }
 
-  for (int i = 0; i < 3; i++)
+  for (int i = 0; i < BOMBA_COUNT; i++)
   {
     String bombaKey = "bomb" + String(i + 1);
     JsonObject bomba = doc[bombaKey];
@@ -963,6 +989,21 @@ void loadBombasConfig()
     parseBombData(i, bomba);
   }
 
+  // Migração NVS: preencher bombas que não existiam na config salva (ex: upgrade de 3→4)
+  for (int i = 0; i < BOMBA_COUNT; i++)
+  {
+    if (bombas[i].name.isEmpty())
+    {
+      Serial.printf("[config] Slot %d vazio, preenchendo com valores padrao (upgrade).\n", i + 1);
+      bombas[i].name = "Bomba " + String(i + 1);
+      bombas[i].calibrCoef = 1.0f;
+      bombas[i].quantidadeEstoque = 1000.0f;
+      for (int j = 0; j < SCHEDULE_COUNT; j++)
+        resetSchedule(bombas[i].schedules[j]);
+    }
+  }
+
+  saveBombasConfig();
   Serial.println("[config] Configuracoes carregadas com sucesso.");
 }
 
@@ -978,7 +1019,7 @@ bool applyConfigJson(const String &json)
     return false;
   }
 
-  for (int i = 0; i < 3; i++)
+  for (int i = 0; i < BOMBA_COUNT; i++)
   {
     String bombaKey = "bomb" + String(i + 1);
     JsonObject bomba = doc[bombaKey];
@@ -1014,7 +1055,7 @@ bool parseDateTime(const String &value, DateTime &output)
 }
 
 // =========================================================
-// Scheduler (CORRIGIDO: controle por minuteKey)
+// Scheduler
 // =========================================================
 void checkSchedules()
 {
@@ -1047,9 +1088,9 @@ void checkSchedules()
 
   Serial.printf("[scheduler] Dia da semana: %d, Chave de minuto: %ld\n", diaSemana, minuteKey);
 
-  for (int i = 0; i < 3; i++)
+  for (int i = 0; i < BOMBA_COUNT; i++)
   {
-    for (int j = 0; j < 3; j++)
+    for (int j = 0; j < SCHEDULE_COUNT; j++)
     {
       Schedule &schedule = bombas[i].schedules[j];
 
@@ -1078,7 +1119,7 @@ void checkSchedules()
 // =========================================================
 bool enqueuePumpJob(int bombaIndex, float dosagem, const String &origem)
 {
-  if (bombaIndex < 0 || bombaIndex >= 3 || dosagem <= 0)
+  if (bombaIndex < 0 || bombaIndex >= BOMBA_COUNT || dosagem <= 0)
   {
     Serial.printf("[queue] ERRO: Tentativa invalida de dosagem. Bomba: %d, Dose: %.2f\n",
                   bombaIndex, dosagem);
@@ -1113,13 +1154,8 @@ bool enqueuePumpJob(int bombaIndex, float dosagem, const String &origem)
 
 int pumpPinForIndex(int bombaIndex)
 {
-  switch (bombaIndex)
-  {
-  case 0: return BOMBA1_PIN;
-  case 1: return BOMBA2_PIN;
-  case 2: return BOMBA3_PIN;
-  default: return BOMBA1_PIN;
-  }
+  if (bombaIndex < 0 || bombaIndex >= BOMBA_COUNT) return PUMP_PINS[0];
+  return PUMP_PINS[bombaIndex];
 }
 
 void finishPumpJob()
@@ -1216,9 +1252,14 @@ void updateLedMode(LedMode mode)
   noNetBlinkActive = false;
   lastNoNetBlink = millis();
 
-  if (mode == LED_MODE_READY || mode == LED_MODE_NO_NET)
+  if (mode == LED_MODE_READY)
   {
-    setLedColor(0, 255, 0);
+    setLedColor(128, 0, 255);
+    ledBlinkOn = false;
+  }
+  else if (mode == LED_MODE_NO_NET)
+  {
+    setLedColor(128, 0, 255);
     ledBlinkOn = false;
   }
   else if (mode == LED_MODE_BOOT)
@@ -1251,8 +1292,8 @@ void updateStatusLed()
     {
       ledLastToggle = now;
       ledBlinkOn = !ledBlinkOn;
+      setLedColor(ledBlinkOn ? 255 : 0, 0, 0);
     }
-    setLedColor(ledBlinkOn ? 255 : 0, 0, 0);
     break;
 
   case LED_MODE_DOSING:
@@ -1260,8 +1301,8 @@ void updateStatusLed()
     {
       ledLastToggle = now;
       ledBlinkOn = !ledBlinkOn;
+      setLedColor(0, 0, ledBlinkOn ? 255 : 0);
     }
-    setLedColor(0, 0, ledBlinkOn ? 255 : 0);
     break;
 
   case LED_MODE_NO_NET:
@@ -1271,21 +1312,21 @@ void updateStatusLed()
       noNetBlinkStart = now;
       setLedColor(0, 0, 0);
     }
-    else if (noNetBlinkActive && now - noNetBlinkStart >= 150) // CORRIGIDO: noNetBlinkStart
+    else if (noNetBlinkActive && now - noNetBlinkStart >= 150)
     {
       noNetBlinkActive = false;
       lastNoNetBlink = now;
-      setLedColor(0, 255, 0);
+      setLedColor(128, 0, 255);
     }
     else if (!noNetBlinkActive)
     {
-      setLedColor(0, 255, 0);
+      setLedColor(128, 0, 255);
     }
     break;
 
   case LED_MODE_READY:
   default:
-    setLedColor(0, 255, 0);
+    setLedColor(128, 0, 255);
     break;
   }
 }
@@ -1333,22 +1374,16 @@ void setup()
   setupServer();
 
   applyApPriority();
-  logWifiStatusChange();
 
   Serial.println("[system] Setup concluido. Entrando no loop principal...");
 }
 
 void loop()
 {
-  const bool pauseForAp = shouldPauseForAp();
-
   applyApPriority();
   ensureStaWifi();
-
-  if (!pauseForAp)
-  {
-    ensureTimeSynced();
-  }
+  ensureTimeSynced();
+  ensureApIsUp();
 
   checkSchedules();
   processPumpQueue();

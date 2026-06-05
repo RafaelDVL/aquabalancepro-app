@@ -34,8 +34,8 @@
 
 ## 📊 Estados do LED (Indicador Visual)
 - 🔴 **Vermelho** = Iniciando (boot)
-- 🟢 **Verde** = Sistema pronto e funcionando
-- 🟢 **Verde piscando** = Sem WiFi/Firebase (offline)
+- 🟣 **Roxo** = Sistema pronto e funcionando
+- 🟣 **Roxo piscando** = Sem WiFi/Firebase (offline)
 - 🔵 **Azul** = Bomba dosando
 
 ## 🧪 Testando Modo Offline

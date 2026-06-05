@@ -26,4 +26,67 @@
   .schedule-panel {
     min-width: 100%;
   }
+
+  .day-toggle {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.8rem;
+    border: 1px solid rgba(248, 113, 113, 0.55);
+    background: linear-gradient(145deg, rgba(127, 29, 29, 0.55), rgba(69, 10, 10, 0.95));
+    color: #fee2e2;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    transition: transform 160ms ease, box-shadow 200ms ease, border-color 200ms ease, background 200ms ease, color 200ms ease;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 16px rgba(0, 0, 0, 0.25);
+  }
+
+  .day-toggle:active {
+    transform: scale(0.96);
+  }
+
+  .day-toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25), 0 0 0 4px rgba(239, 68, 68, 0.45);
+  }
+
+  .day-toggle .day-label {
+    line-height: 1;
+  }
+
+  .day-toggle .state-dot {
+    position: absolute;
+    right: 0.34rem;
+    bottom: 0.34rem;
+    width: 0.42rem;
+    height: 0.42rem;
+    border-radius: 9999px;
+    background: #ef4444;
+    box-shadow: 0 0 0 1px rgba(127, 29, 29, 0.7), 0 0 8px rgba(239, 68, 68, 0.45);
+  }
+
+  .day-toggle.is-active {
+    border-color: rgba(34, 197, 94, 0.85);
+    background: linear-gradient(145deg, rgba(8, 145, 178, 0.9), rgba(16, 185, 129, 0.85));
+    color: #ecfeff;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 0 1px rgba(34, 197, 94, 0.35), 0 10px 22px rgba(6, 182, 212, 0.35);
+    transform: translateY(-1px);
+  }
+
+  .day-toggle.is-active:focus-visible {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25), 0 0 0 4px rgba(34, 197, 94, 0.45);
+  }
+
+  .day-toggle.is-active .state-dot {
+    background: #22c55e;
+    box-shadow: 0 0 0 1px rgba(6, 78, 59, 0.7), 0 0 10px rgba(34, 197, 94, 0.75);
+  }
+
+  .day-toggle.is-inactive:hover {
+    border-color: rgba(248, 113, 113, 0.8);
+    background: linear-gradient(145deg, rgba(153, 27, 27, 0.65), rgba(69, 10, 10, 1));
+  }
 }

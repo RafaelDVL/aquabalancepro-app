@@ -118,6 +118,7 @@ export class AnalyticsPage implements ViewWillEnter, ViewWillLeave {
     1: '#2DD4BF',
     2: '#F472B6',
     3: '#A855F7',
+    4: '#3B82F6',
   };
   private storedColors: Record<string, string> = {};
 

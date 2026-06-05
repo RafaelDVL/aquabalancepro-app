@@ -39,7 +39,7 @@ import { colorWandOutline, waterOutline } from 'ionicons/icons';
 export class CalibracaoPage {
   bombs: BombConfig[] = [];
   selectedBombId = 1;
-  readonly calibrationDoseMl = 1;
+  calibrationDose = 5;
   quickTestBombId = 1;
   quickTestDose = 1;
   readonly quickDoseOptions = [1, 3, 5, 10, 15];
@@ -97,7 +97,7 @@ export class CalibracaoPage {
     this.pendingCalibration = true;
     try {
       await firstValueFrom(
-        this.doser.testDose(this.selectedBombId, this.calibrationDoseMl, 'Calibracao'),
+        this.doser.testDose(this.selectedBombId, this.calibrationDose, 'Calibracao'),
       );
       this.showDosePrompt = true;
     } catch (error) {
@@ -114,7 +114,7 @@ export class CalibracaoPage {
       return;
     }
 
-    const ratio = this.calibrationDoseMl / measured;
+    const ratio = this.calibrationDose / measured;
     const updated = {
       ...this.selectedBomb,
       calibrCoef: Number((this.selectedBomb.calibrCoef * ratio).toFixed(3)),
@@ -130,6 +130,16 @@ export class CalibracaoPage {
       this.errorMessage = error instanceof Error ? error.message : 'Falha ao salvar calibracao.';
     } finally {
       this.showDosePrompt = false;
+    }
+  }
+  
+  increaseCalibrationDose(): void {
+    this.calibrationDose = Number((this.calibrationDose + 1).toFixed(1));
+  }
+
+  decreaseCalibrationDose(): void {
+    if (this.calibrationDose > 1) {
+      this.calibrationDose = Number((this.calibrationDose - 1).toFixed(1));
     }
   }
 

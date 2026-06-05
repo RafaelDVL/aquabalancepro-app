@@ -163,14 +163,17 @@
                     <label class="text-sm text-text-muted mb-2 block pl-1">Dias de funcionamento</label>
 
                     <div class="grid grid-cols-7 gap-2">
-                      <button type="button" *ngFor="let day of days; let i = index" (click)="toggleDay(schedule, i)"
-                        class="aspect-square flex items-center justify-center rounded-xl text-sm font-bold border transition-all duration-200"
-                        [ngClass]="
-          schedule.diasSemana[i]
-            ? 'bg-neon-cyan text-ocean-dark border-neon-cyan shadow-[0_0_10px_rgba(34,211,238,0.4)] scale-105'
-            : 'bg-white/5 border-transparent text-text-muted hover:bg-white/10 hover:border-white/20'
-        ">
-                        {{ day | slice:0:3 }}
+                      <button
+                        type="button"
+                        *ngFor="let day of days; let i = index"
+                        (click)="toggleDay(schedule, i)"
+                        class="day-toggle"
+                        [ngClass]="schedule.diasSemana[i] ? 'is-active' : 'is-inactive'"
+                        [attr.aria-pressed]="schedule.diasSemana[i]"
+                        [attr.aria-label]="day + (schedule.diasSemana[i] ? ' ativado' : ' desativado')"
+                      >
+                        <span class="day-label">{{ day }}</span>
+                        <span class="state-dot" aria-hidden="true"></span>
                       </button>
                     </div>
                   </div>

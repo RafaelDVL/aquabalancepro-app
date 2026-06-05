@@ -38,9 +38,21 @@
         </div>
 
         <div class="grid grid-cols-2 gap-3 text-sm text-white/80">
-          <div class="bg-white/5 border border-white/5 rounded-xl p-3 flex items-center justify-between">
-            <span class="text-white/60">Dose de teste</span>
-            <span class="font-semibold text-white">1 ml</span>
+          <div class="bg-white/5 border border-white/5 rounded-xl p-3 flex flex-col justify-between gap-2 col-span-2">
+            <span class="text-white/60">Dose de teste (ml)</span>
+            <div class="flex items-center gap-3 w-full">
+              <button type="button" (click)="decreaseCalibrationDose()"
+                class="h-10 w-10 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white hover:border-cyan-400/40 hover:bg-white/10 active:scale-90 transition-all font-bold text-lg">
+                −
+              </button>
+              <input type="number" [(ngModel)]="calibrationDose" step="1" min="1"
+                class="flex-1 h-10 bg-white/5 border border-white/10 rounded-lg px-2 text-white text-center font-semibold focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-all placeholder-white/30"
+                placeholder="10" />
+              <button type="button" (click)="increaseCalibrationDose()"
+                class="h-10 w-10 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white hover:border-cyan-400/40 hover:bg-white/10 active:scale-90 transition-all font-bold text-lg">
+                +
+              </button>
+            </div>
           </div>
           <div class="bg-white/5 border border-white/5 rounded-xl p-3 flex items-center justify-between"
             *ngIf="selectedBomb">

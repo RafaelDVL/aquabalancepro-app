@@ -73,6 +73,7 @@ type RawConfig = Record<string, RawBomb>;
 export class DoserService {
   private readonly apiUrl = 'http://192.168.4.1';
   private readonly scheduleCount = 3;
+  private readonly bombCount = 4;
   private readonly plainJsonHeaders = new HttpHeaders({
     'Content-Type': 'text/plain',
   });
@@ -166,7 +167,7 @@ export class DoserService {
   }
 
   private mapBombs(raw: RawConfig): BombConfig[] {
-    return [1, 2, 3].map((id) => {
+    return Array.from({ length: this.bombCount }, (_, i) => i + 1).map((id) => {
       const key = `bomb${id}`;
       const bomb = raw?.[key] ?? {};
       const legacySchedule: RawSchedule = {

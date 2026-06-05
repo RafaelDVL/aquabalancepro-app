@@ -77,6 +77,7 @@ export class ConfiguracaoPage {
     1: '#2DD4BF',
     2: '#F472B6',
     3: '#A855F7',
+    4: '#3B82F6',
   };
   readonly colorOptions = [
     '#2DD4BF',
@@ -239,7 +240,7 @@ export class ConfiguracaoPage {
   }
 
   private createFallbackBombs(storedColors: Record<string, string>): BombForm[] {
-    return [1, 2, 3].map((id) =>
+    return [1, 2, 3, 4].map((id) =>
       this.toFormBomb(
         {
           id,
