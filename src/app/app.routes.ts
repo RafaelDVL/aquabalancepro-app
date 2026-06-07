@@ -24,6 +24,14 @@ export const routes: Routes = [
     loadComponent: () => import('./analytics/analytics.page').then((m) => m.AnalyticsPage),
   },
   {
+    path: 'relays',
+    loadComponent: () => import('./relays/relays.page').then((m) => m.RelaysPage),
+  },
+  {
+    path: 'rules',
+    loadComponent: () => import('./rules/rules.page').then((m) => m.RulesPage),
+  },
+  {
     path: '',
     redirectTo: 'home',
     pathMatch: 'full',

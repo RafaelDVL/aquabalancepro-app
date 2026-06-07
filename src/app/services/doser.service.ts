@@ -42,6 +42,26 @@ export interface LogEntry {
   origem: string;
 }
 
+export interface RelayInfo {
+  id: number;
+  name: string;
+  state: boolean;
+  timerRemaining: number;
+}
+
+export interface RuleAction {
+  targetRelay: number;
+  turnOff: boolean;
+  durationSec: number;
+}
+
+export interface RelayRule {
+  name: string;
+  triggerPumpId: number;
+  actions: RuleAction[];
+  enabled: boolean;
+}
+
 interface RawStatus {
   time?: string;
   wifi?: { connected?: boolean; rssi?: number; ip?: string };
@@ -156,6 +176,58 @@ export class DoserService {
   clearLogs(): Observable<ApiStatusResponse> {
     return this.withWifiBinding(
       this.http.delete<ApiStatusResponse>(`${this.apiUrl}/logs`),
+    );
+  }
+
+  getRelays(): Observable<RelayInfo[]> {
+    return this.withWifiBinding(
+      this.http.get<RelayInfo[] | { relays?: RelayInfo[] }>(`${this.apiUrl}/relays`).pipe(
+        map((response) => {
+          if (Array.isArray(response)) {
+            return response;
+          }
+          if (response && Array.isArray(response.relays)) {
+            return response.relays;
+          }
+          return [];
+        }),
+      ),
+    );
+  }
+
+  setRelay(id: number, state: boolean): Observable<ApiStatusResponse> {
+    return this.withWifiBinding(
+      this.http.post<ApiStatusResponse>(
+        `${this.apiUrl}/relay`,
+        JSON.stringify({ id, state }),
+        { headers: this.plainJsonHeaders },
+      ),
+    );
+  }
+
+  getRules(): Observable<RelayRule[]> {
+    return this.withWifiBinding(
+      this.http.get<RelayRule[] | { rules?: RelayRule[] }>(`${this.apiUrl}/rules`).pipe(
+        map((response) => {
+          if (Array.isArray(response)) {
+            return response;
+          }
+          if (response && Array.isArray(response.rules)) {
+            return response.rules;
+          }
+          return [];
+        }),
+      ),
+    );
+  }
+
+  saveRules(rules: RelayRule[]): Observable<ApiStatusResponse> {
+    return this.withWifiBinding(
+      this.http.post<ApiStatusResponse>(
+        `${this.apiUrl}/rules`,
+        JSON.stringify(rules),
+        { headers: this.plainJsonHeaders },
+      ),
     );
   }
 

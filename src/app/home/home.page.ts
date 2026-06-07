@@ -22,6 +22,7 @@ import {
   refreshCircle,
   statsChart,
   beakerOutline,
+  flashOutline,
 } from 'ionicons/icons';
 
 import { firstValueFrom, interval, Subscription } from 'rxjs';
@@ -53,7 +54,7 @@ export class HomePage {
 
   constructor(private readonly doser: DoserService, private readonly router: Router) {
     // Registra os ícones para que apareçam no HTML
-    addIcons({timeOutline,wifi,refreshCircle,settingsSharp,statsChart,receiptOutline,cloud,beakerOutline});
+    addIcons({timeOutline,wifi,refreshCircle,settingsSharp,statsChart,receiptOutline,cloud,beakerOutline,flashOutline});
   }
 
   ionViewWillEnter(): void {
@@ -139,5 +140,9 @@ export class HomePage {
 
   openCalibracao(): void {
     void this.router.navigateByUrl('/calibracao');
+  }
+
+  openRelays(): void {
+    void this.router.navigateByUrl('/relays');
   }
 }

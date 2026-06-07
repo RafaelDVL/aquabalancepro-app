@@ -29,6 +29,20 @@
 #define LOG_FILE "/logs.jsonl"
 #define LOG_TEMP_FILE "/logs.tmp"
 
+// --- Relés ---
+#define RELE1_PIN 8
+#define RELE2_PIN 9
+#define RELE3_PIN 10
+#define RELE4_PIN 11
+#define RELAY_COUNT 4
+#define MAX_RULES 6
+// Módulo ativo-baixo + equipamento no contato NC:
+//   equipamento LIGADO    = relé desenergizado = GPIO HIGH
+//   equipamento DESLIGADO = relé energizado    = GPIO LOW
+// Se na bancada o comportamento sair invertido, troque apenas estas duas linhas.
+#define RELAY_LEVEL_EQUIP_ON HIGH
+#define RELAY_LEVEL_EQUIP_OFF LOW
+
 const uint8_t PUMP_PINS[BOMBA_COUNT] = {BOMBA1_PIN, BOMBA2_PIN, BOMBA3_PIN, BOMBA4_PIN};
 
 // --- Wi-Fi ---
@@ -113,6 +127,22 @@ struct PumpJob
   DateTime timestamp;
 };
 
+struct RuleAction
+{
+  uint8_t targetRelay;       // 0-3 interno
+  bool turnOff;              // true = desliga o equipamento ao disparar
+  unsigned long durationSec; // 0 = sem timer (permanente)
+};
+
+struct RelayRule
+{
+  uint8_t triggerPumpId; // 0-3 interno
+  RuleAction actions[4];
+  uint8_t actionCount;
+  bool enabled;
+  String name;
+};
+
 PumpJob pumpQueue[MAX_PUMP_QUEUE];
 volatile int pumpHead = 0;
 volatile int pumpTail = 0;
@@ -121,6 +151,13 @@ PumpJob activeJob;
 unsigned long pumpStartTime = 0;
 unsigned long pumpDuration = 0;
 portMUX_TYPE pumpQueueMux = portMUX_INITIALIZER_UNLOCKED;
+
+RelayRule rules[MAX_RULES];
+uint8_t ruleCount = 0;
+bool relayStates[RELAY_COUNT] = {true, true, true, true}; // estado do EQUIPAMENTO (true = ligado)
+unsigned long relayTimers[RELAY_COUNT] = {0, 0, 0, 0};
+const char *relayNames[RELAY_COUNT] = {"Rele 1", "Rele 2", "Rele 3", "Rele 4"};
+Preferences relayPrefs;
 
 bool rtcReady = false;
 bool prefsReady = false;
@@ -175,6 +212,21 @@ void handleGetLogs(AsyncWebServerRequest *request);
 void handleDeleteLogs(AsyncWebServerRequest *request);
 void storeRequestBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
 bool readRequestBody(AsyncWebServerRequest *request, String &body);
+
+// Relés / Regras
+void inicializarRele();
+int relayPinForIndex(int i);
+void writeRelay(int i, bool equipOn);
+void handleGetRelays(AsyncWebServerRequest *request);
+void handlePostRelay(AsyncWebServerRequest *request);
+void handleGetRules(AsyncWebServerRequest *request);
+void handlePostRules(AsyncWebServerRequest *request);
+void applyRulesForPump(int bombaIndex);
+void checkRelayTimers();
+void saveRelayConfig();
+void loadRelayConfig();
+String buildRulesJson();
+bool applyRulesJson(const String &json);
 
 // Config / JSON
 void inicializarBombas();
@@ -613,6 +665,225 @@ void handleDeleteLogs(AsyncWebServerRequest *request)
   request->send(200, "application/json", "{\"ok\":true}");
 }
 
+// =========================================================
+// Relés / Regras — JSON, persistência, endpoints e motor
+// =========================================================
+String buildRulesJson()
+{
+  JsonDocument doc;
+  JsonArray arr = doc.to<JsonArray>();
+  for (int r = 0; r < ruleCount; r++)
+  {
+    JsonObject ro = arr.add<JsonObject>();
+    ro["name"] = rules[r].name;
+    ro["triggerPumpId"] = rules[r].triggerPumpId + 1; // 1-based na API
+    ro["enabled"] = rules[r].enabled;
+
+    JsonArray acts = ro["actions"].to<JsonArray>();
+    for (int a = 0; a < rules[r].actionCount; a++)
+    {
+      JsonObject ao = acts.add<JsonObject>();
+      ao["targetRelay"] = rules[r].actions[a].targetRelay + 1; // 1-based
+      ao["turnOff"] = rules[r].actions[a].turnOff;
+      ao["durationSec"] = rules[r].actions[a].durationSec;
+    }
+  }
+  String out;
+  serializeJson(doc, out);
+  return out;
+}
+
+bool applyRulesJson(const String &json)
+{
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, json);
+  if (error || !doc.is<JsonArray>()) return false;
+
+  uint8_t count = 0;
+  for (JsonObject ro : doc.as<JsonArray>())
+  {
+    if (count >= MAX_RULES) break;
+    RelayRule &rule = rules[count];
+
+    rule.name = ro["name"] | "";
+
+    int trig = (int)(ro["triggerPumpId"] | 1) - 1; // 1-based -> 0-based
+    if (trig < 0) trig = 0;
+    if (trig >= BOMBA_COUNT) trig = BOMBA_COUNT - 1;
+    rule.triggerPumpId = (uint8_t)trig;
+
+    rule.enabled = ro["enabled"] | true;
+    rule.actionCount = 0;
+
+    if (ro["actions"].is<JsonArray>())
+    {
+      for (JsonObject ao : ro["actions"].as<JsonArray>())
+      {
+        if (rule.actionCount >= 4) break;
+        RuleAction &act = rule.actions[rule.actionCount];
+
+        int tgt = (int)(ao["targetRelay"] | 1) - 1; // 1-based -> 0-based
+        if (tgt < 0) tgt = 0;
+        if (tgt >= RELAY_COUNT) tgt = RELAY_COUNT - 1;
+        act.targetRelay = (uint8_t)tgt;
+
+        act.turnOff = ao["turnOff"] | true;
+        act.durationSec = ao["durationSec"] | 0UL;
+        rule.actionCount++;
+      }
+    }
+    count++;
+  }
+  ruleCount = count;
+  return true;
+}
+
+void saveRelayConfig()
+{
+  Serial.println("[relay] Salvando regras (Preferences)...");
+  relayPrefs.putString("rules", buildRulesJson());
+}
+
+void loadRelayConfig()
+{
+  String json = relayPrefs.getString("rules", "");
+  if (json.isEmpty())
+  {
+    ruleCount = 0;
+    Serial.println("[relay] Nenhuma regra salva.");
+    return;
+  }
+  if (!applyRulesJson(json))
+  {
+    ruleCount = 0;
+    Serial.println("[relay] ERRO ao ler regras salvas.");
+  }
+  else
+  {
+    Serial.printf("[relay] %d regra(s) carregada(s).\n", ruleCount);
+  }
+}
+
+void handleGetRelays(AsyncWebServerRequest *request)
+{
+  Serial.println("[http] Recebido: GET /relays");
+  JsonDocument doc;
+  JsonArray arr = doc.to<JsonArray>();
+  unsigned long now = millis();
+
+  for (int i = 0; i < RELAY_COUNT; i++)
+  {
+    JsonObject o = arr.add<JsonObject>();
+    o["id"] = i + 1;
+    o["name"] = relayNames[i];
+    o["state"] = relayStates[i];
+
+    unsigned long remaining = 0;
+    if (relayTimers[i] != 0 && relayTimers[i] > now)
+      remaining = (relayTimers[i] - now) / 1000UL;
+    o["timerRemaining"] = remaining;
+  }
+
+  String payload;
+  serializeJson(doc, payload);
+  request->send(200, "application/json", payload);
+}
+
+void handlePostRelay(AsyncWebServerRequest *request)
+{
+  Serial.println("[http] Recebido: POST /relay");
+  String body;
+  if (!readRequestBody(request, body))
+  {
+    request->send(400, "application/json", "{\"ok\":false,\"message\":\"body ausente\"}");
+    return;
+  }
+
+  JsonDocument doc;
+  if (deserializeJson(doc, body))
+  {
+    request->send(400, "application/json", "{\"ok\":false,\"message\":\"json invalido\"}");
+    return;
+  }
+
+  int id = doc["id"] | 0;
+  bool state = doc["state"] | false;
+  if (id < 1 || id > RELAY_COUNT)
+  {
+    request->send(400, "application/json", "{\"ok\":false,\"message\":\"id invalido\"}");
+    return;
+  }
+
+  int idx = id - 1;
+  writeRelay(idx, state);
+  relayTimers[idx] = 0; // manual vence o timer
+  Serial.printf("[relay] Manual: rele %d -> %s\n", id, state ? "LIGADO" : "DESLIGADO");
+  request->send(200, "application/json", "{\"ok\":true}");
+}
+
+void handleGetRules(AsyncWebServerRequest *request)
+{
+  Serial.println("[http] Recebido: GET /rules");
+  request->send(200, "application/json", buildRulesJson());
+}
+
+void handlePostRules(AsyncWebServerRequest *request)
+{
+  Serial.println("[http] Recebido: POST /rules");
+  String body;
+  if (!readRequestBody(request, body))
+  {
+    request->send(400, "application/json", "{\"ok\":false,\"message\":\"body ausente\"}");
+    return;
+  }
+
+  if (!applyRulesJson(body))
+  {
+    request->send(400, "application/json", "{\"ok\":false,\"message\":\"json invalido\"}");
+    return;
+  }
+
+  saveRelayConfig();
+  request->send(200, "application/json", "{\"ok\":true}");
+}
+
+// Disparado ao iniciar uma dosagem: aplica as ações das regras da bomba.
+void applyRulesForPump(int bombaIndex)
+{
+  for (int r = 0; r < ruleCount; r++)
+  {
+    if (!rules[r].enabled || rules[r].triggerPumpId != bombaIndex) continue;
+
+    for (int a = 0; a < rules[r].actionCount; a++)
+    {
+      RuleAction &act = rules[r].actions[a];
+      writeRelay(act.targetRelay, !act.turnOff); // turnOff=true => equipamento OFF
+      relayTimers[act.targetRelay] =
+          act.durationSec > 0 ? millis() + act.durationSec * 1000UL : 0;
+
+      Serial.printf("[relay] Regra '%s': rele %d -> %s%s\n",
+                    rules[r].name.c_str(), act.targetRelay + 1,
+                    act.turnOff ? "DESLIGADO" : "LIGADO",
+                    act.durationSec > 0 ? " (com timer)" : "");
+    }
+  }
+}
+
+// Religa o equipamento quando o timer da ação expira (sempre religar).
+void checkRelayTimers()
+{
+  unsigned long now = millis();
+  for (int i = 0; i < RELAY_COUNT; i++)
+  {
+    if (relayTimers[i] != 0 && now >= relayTimers[i])
+    {
+      writeRelay(i, true); // expira => equipamento LIGADO
+      relayTimers[i] = 0;
+      Serial.printf("[relay] Timer expirou: rele %d religado.\n", i + 1);
+    }
+  }
+}
+
 void setupServer()
 {
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
@@ -631,6 +902,11 @@ void setupServer()
   server.on("/dose", HTTP_POST, handlePostDose, nullptr, storeRequestBody);
   server.on("/logs", HTTP_GET, handleGetLogs);
   server.on("/logs", HTTP_DELETE, handleDeleteLogs);
+
+  server.on("/relays", HTTP_GET, handleGetRelays);
+  server.on("/relay", HTTP_POST, handlePostRelay, nullptr, storeRequestBody);
+  server.on("/rules", HTTP_GET, handleGetRules);
+  server.on("/rules", HTTP_POST, handlePostRules, nullptr, storeRequestBody);
 
   server.onNotFound([](AsyncWebServerRequest *request) {
     Serial.printf("[http] 404/Options: %s %s\n",
@@ -842,6 +1118,34 @@ void inicializarBombas()
   }
 
   Serial.printf("[system] %d bombas inicializadas.\n", BOMBA_COUNT);
+}
+
+// =========================================================
+// Relés (helpers)
+// =========================================================
+int relayPinForIndex(int i)
+{
+  static const uint8_t pins[RELAY_COUNT] = {RELE1_PIN, RELE2_PIN, RELE3_PIN, RELE4_PIN};
+  if (i < 0 || i >= RELAY_COUNT) return pins[0];
+  return pins[i];
+}
+
+void writeRelay(int i, bool equipOn)
+{
+  if (i < 0 || i >= RELAY_COUNT) return;
+  digitalWrite(relayPinForIndex(i), equipOn ? RELAY_LEVEL_EQUIP_ON : RELAY_LEVEL_EQUIP_OFF);
+  relayStates[i] = equipOn;
+}
+
+void inicializarRele()
+{
+  for (int i = 0; i < RELAY_COUNT; i++)
+  {
+    pinMode(relayPinForIndex(i), OUTPUT);
+    writeRelay(i, true); // boot = equipamento LIGADO (fail-safe com fiação NC)
+    relayTimers[i] = 0;
+  }
+  Serial.printf("[system] %d reles inicializados (equipamentos ligados).\n", RELAY_COUNT);
 }
 
 void resetSchedule(Schedule &schedule)
@@ -1216,6 +1520,8 @@ void startNextPumpJob()
 
   int pin = pumpPinForIndex(activeJob.bombaIndex);
   digitalWrite(pin, HIGH);
+
+  applyRulesForPump(activeJob.bombaIndex);
 }
 
 void processPumpQueue()
@@ -1340,6 +1646,7 @@ void setup()
   Serial.println("\n\n--- INICIANDO FIRE DOSER SYSTEM ---");
 
   inicializarBombas();
+  inicializarRele();
 
   Wire.begin(I2C_SDA, I2C_SCL);
 
@@ -1359,6 +1666,11 @@ void setup()
     loadBombasConfig();
   else
     Serial.println("[config] ERRO: Falha ao iniciar Preferences.");
+
+  if (relayPrefs.begin("relay-config", false))
+    loadRelayConfig();
+  else
+    Serial.println("[relay] ERRO: Falha ao iniciar Preferences de reles.");
 
   initLogStorage();
 
@@ -1387,6 +1699,7 @@ void loop()
 
   checkSchedules();
   processPumpQueue();
+  checkRelayTimers();
 
   updateStatusLed();
   logWifiStatusChange();
