@@ -380,24 +380,41 @@ export class AnalyticsPage implements ViewWillEnter, ViewWillLeave {
 
     const finalScheduled: DailyDataPoint[] = [];
 
+    // Otimização: Agrupar executados por bombId para evitar busca O(N*M)
+    const executedByBombId: { [key: number]: { exec: DailyDataPoint, index: number }[] } = {};
+    executed.forEach((exec, index) => {
+      if (!executedByBombId[exec.bombId]) {
+        executedByBombId[exec.bombId] = [];
+      }
+      executedByBombId[exec.bombId].push({ exec, index });
+    });
+
     scheduled.forEach((sched) => {
       const schedTimeVal = sched.hour * 60 + sched.minute;
 
-      // Tentar encontrar um executado correspondente
-      const matchIndex = executed.findIndex((exec) => {
-        // Já foi mergeado?
-        if (exec.scheduledTime) return false;
-        
-        // Mesma bomba e dosagem aprox (float compare)
-        if (exec.bombId !== sched.bombId) return false;
-        if (Math.abs(exec.dosagem - sched.dosagem) > 0.05) return false;
+      let matchIndex = -1;
+      const candidates = executedByBombId[sched.bombId];
 
-        // Tolerância de tempo (ex: +/- 30 minutos)
-        // Isso cobre casos onde o relógio do ESP estava levemente adiantado/atrasado ou delay de rede
-        const execTimeVal = exec.hour * 60 + exec.minute;
-        const diff = Math.abs(execTimeVal - schedTimeVal);
-        return diff <= 30; 
-      });
+      if (candidates) {
+        for (let i = 0; i < candidates.length; i++) {
+          const c = candidates[i];
+          // Já foi mergeado?
+          if (c.exec.scheduledTime) continue;
+
+          // Mesma bomba e dosagem aprox (float compare)
+          if (Math.abs(c.exec.dosagem - sched.dosagem) > 0.05) continue;
+
+          // Tolerância de tempo (ex: +/- 30 minutos)
+          // Isso cobre casos onde o relógio do ESP estava levemente adiantado/atrasado ou delay de rede
+          const execTimeVal = c.exec.hour * 60 + c.exec.minute;
+          const diff = Math.abs(execTimeVal - schedTimeVal);
+
+          if (diff <= 30) {
+            matchIndex = c.index;
+            break;
+          }
+        }
+      }
 
       if (matchIndex !== -1) {
         // Encontrou correspondência!
