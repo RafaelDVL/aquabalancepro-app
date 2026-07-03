@@ -187,8 +187,17 @@ export class AnalyticsPage implements ViewWillEnter, ViewWillLeave {
     const datasets: any[] = [];
     const bombIds = [...new Set(data.map(d => d.bombId))].sort((a, b) => a - b);
 
+    // Agrupa dados por bombId (O(N)) para evitar O(N*M)
+    const groupedData = data.reduce((acc, curr) => {
+      if (!acc[curr.bombId]) {
+        acc[curr.bombId] = [];
+      }
+      acc[curr.bombId].push(curr);
+      return acc;
+    }, {} as Record<number, DailyDataPoint[]>);
+
     bombIds.forEach((bombId) => {
-      const bombData = data.filter(d => d.bombId === bombId);
+      const bombData = groupedData[bombId] || [];
       datasets.push({
         label: this.getBombName(bombId),
         data: bombData.map((d) => {
@@ -303,9 +312,18 @@ export class AnalyticsPage implements ViewWillEnter, ViewWillLeave {
     const data = this.getDailyData();
     const bombIds = [...new Set(data.map(d => d.bombId))].sort((a, b) => a - b);
 
+    // Agrupa dados por bombId (O(N)) para evitar O(N*M)
+    const groupedData = data.reduce((acc, curr) => {
+      if (!acc[curr.bombId]) {
+        acc[curr.bombId] = [];
+      }
+      acc[curr.bombId].push(curr);
+      return acc;
+    }, {} as Record<number, DailyDataPoint[]>);
+
     // Reconstruir datasets
     this.dailyChart.data.datasets = bombIds.map((bombId) => {
-      const bombData = data.filter(d => d.bombId === bombId);
+      const bombData = groupedData[bombId] || [];
       return {
         label: this.getBombName(bombId),
         data: bombData.map((d) => {
