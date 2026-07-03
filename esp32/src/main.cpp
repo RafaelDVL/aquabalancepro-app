@@ -863,7 +863,8 @@ String buildConfigJson()
 
   for (int i = 0; i < BOMBA_COUNT; i++)
   {
-    String bombaKey = "bomb" + String(i + 1);
+    char bombaKey[8];
+    snprintf(bombaKey, sizeof(bombaKey), "bomb%d", i + 1);
     JsonObject bomba = doc[bombaKey].to<JsonObject>();
 
     bomba["name"] = bombas[i].name;
@@ -983,7 +984,8 @@ void loadBombasConfig()
 
   for (int i = 0; i < BOMBA_COUNT; i++)
   {
-    String bombaKey = "bomb" + String(i + 1);
+    char bombaKey[8];
+    snprintf(bombaKey, sizeof(bombaKey), "bomb%d", i + 1);
     JsonObject bomba = doc[bombaKey];
     if (bomba.isNull()) continue;
     parseBombData(i, bomba);
@@ -1021,7 +1023,8 @@ bool applyConfigJson(const String &json)
 
   for (int i = 0; i < BOMBA_COUNT; i++)
   {
-    String bombaKey = "bomb" + String(i + 1);
+    char bombaKey[8];
+    snprintf(bombaKey, sizeof(bombaKey), "bomb%d", i + 1);
     JsonObject bomba = doc[bombaKey];
     if (bomba.isNull()) continue;
     parseBombData(i, bomba);
