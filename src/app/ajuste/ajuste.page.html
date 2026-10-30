@@ -1,0 +1,193 @@
+<ion-header>
+  <ion-toolbar class="bg-transparent text-cyan-400" style="--background: transparent;">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/home" color="primary" class="text-cyan-400"></ion-back-button>
+    </ion-buttons>
+    <ion-title class="font-bold">Ajuste de Dosagem</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true" class="relative text-text-main">
+  <div class="fixed inset-0 w-full h-full z-0 pointer-events-none">
+    <img src="assets/followers.jpg" class="w-full h-full object-cover" alt="Background" />
+    <div class="absolute inset-0 bg-gradient-to-b from-[#05161A]/70 via-[#05161A]/85 to-[#05161A]"></div>
+  </div>
+
+  <div class="relative z-10 px-5 pt-6 pb-10 space-y-5">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h1 class="text-xl font-bold text-white">Ajuste semanal</h1>
+        <p class="text-sm text-white/60">Meça, espere alguns dias, meça de novo: o app calcula as novas doses.</p>
+      </div>
+      <button type="button" (click)="openProdutos()"
+        class="shrink-0 btn-outline rounded-xl px-4 py-2 text-sm font-semibold hover:bg-cyan-400/10">
+        Produtos
+      </button>
+    </div>
+
+    <p class="text-sm text-red-400" *ngIf="errorMessage">{{ errorMessage }}</p>
+    <p class="text-sm text-white/60" *ngIf="loading">Carregando...</p>
+
+    <ng-container *ngIf="data && !loading">
+      <div *ngIf="needsSetup" class="rounded-2xl border border-amber-400/40 bg-amber-400/10 p-4 text-sm text-amber-100">
+        Cadastre o volume do aquário e a potência dos produtos de KH/Ca/Mg em
+        <button type="button" class="underline font-semibold" (click)="openProdutos()">Produtos</button>
+        para o cálculo funcionar.
+      </div>
+
+      <!-- Sugestões -->
+      <div *ngIf="suggestions.length" class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl space-y-3">
+        <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Sugestões</p>
+        <div *ngFor="let suggestion of suggestions" class="rounded-xl p-3 border text-sm space-y-2"
+          [ngClass]="suggestion.nivel === 'aviso' ? 'border-amber-400/40 bg-amber-400/10 text-amber-50' : 'border-white/10 bg-white/5 text-white/80'">
+          <p>{{ suggestion.mensagem }}</p>
+          <button *ngIf="suggestion.correcao" type="button" (click)="applySuggestion(suggestion)" [disabled]="busy"
+            class="text-xs font-bold btn-outline rounded-lg px-3 py-1.5 hover:bg-cyan-400/10">
+            {{ suggestion.descricaoCorrecao }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Novo teste -->
+      <div *ngIf="!session" class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl space-y-4">
+        <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Iniciar teste</p>
+        <div class="grid grid-cols-3 gap-2">
+          <label *ngFor="let param of params" class="space-y-1">
+            <span class="text-[11px] text-white/50">{{ paramLabel(param) }}{{ param === 'Mg' ? ' – opcional' : '' }}</span>
+            <input type="number" min="0" step="0.01" [(ngModel)]="medidas[param]" class="field" />
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="space-y-1">
+            <span class="text-[11px] text-white/50">Data da medição</span>
+            <input type="datetime-local" [(ngModel)]="dataInicio" class="field" />
+          </label>
+          <label class="space-y-1">
+            <span class="text-[11px] text-white/50">Medir de novo em</span>
+            <select [(ngModel)]="diasPlanejados" class="field">
+              <option *ngFor="let days of dayOptions" [ngValue]="days">{{ days }} dias</option>
+            </select>
+          </label>
+        </div>
+        <button type="button" (click)="startSession()" [disabled]="busy"
+          class="w-full h-12 rounded-xl btn-outline font-bold tracking-wider hover:bg-cyan-400/10 disabled:opacity-50">
+          Iniciar teste
+        </button>
+      </div>
+
+      <!-- Teste em andamento -->
+      <div *ngIf="session" class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between">
+          <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Teste em andamento</p>
+          <button type="button" (click)="cancelSession()" [disabled]="busy" class="text-xs text-red-300 underline">Descartar</button>
+        </div>
+
+        <div class="space-y-1">
+          <div class="flex justify-between text-sm text-white/70">
+            <span>{{ formatNumber(diasDecorridos, 1) }} de {{ session.diasPlanejados }} dias</span>
+            <span>
+              Início:
+              <ng-container *ngFor="let param of measuredKeys(session.medidasInicio); let last = last">
+                {{ param }} {{ formatNumber(session.medidasInicio[param]) }}{{ last ? '' : ' · ' }}
+              </ng-container>
+            </span>
+          </div>
+          <div class="h-2 rounded-full bg-white/10 overflow-hidden">
+            <div class="h-full bg-cyan-400 transition-all" [style.width.%]="progresso"></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <label class="space-y-1">
+            <span class="text-[11px] text-white/50">Início do teste</span>
+            <input type="datetime-local" [(ngModel)]="dataInicio" class="field" />
+          </label>
+          <label class="space-y-1">
+            <span class="text-[11px] text-white/50">Medição final</span>
+            <input type="datetime-local" [(ngModel)]="dataFim" class="field" />
+          </label>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+          <label *ngFor="let param of params" class="space-y-1">
+            <span class="text-[11px] text-white/50">{{ paramLabel(param) }} agora</span>
+            <input type="number" min="0" step="0.01" [(ngModel)]="medidas[param]" class="field" />
+          </label>
+        </div>
+
+        <p *ngIf="diasDecorridos < session.diasPlanejados" class="text-xs text-amber-200/80">
+          O período ainda não terminou. Dá para calcular antes, mas o erro do teste pesa mais em poucos dias.
+        </p>
+
+        <button type="button" (click)="calculate()" [disabled]="busy || diasDecorridos < 1"
+          class="w-full h-12 rounded-xl btn-outline font-bold tracking-wider hover:bg-cyan-400/10 disabled:opacity-50">
+          Calcular ajuste
+        </button>
+      </div>
+
+      <!-- Resultado -->
+      <div *ngIf="result" class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl space-y-4">
+        <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Resultado ({{ formatNumber(result.dias, 1) }} dias)</p>
+
+        <p *ngFor="let aviso of result.avisos" class="text-sm text-amber-200">{{ aviso }}</p>
+
+        <div *ngFor="let item of result.ajustes" class="rounded-xl border border-white/10 bg-black/30 p-4 space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <label class="flex items-center gap-2">
+              <input *ngIf="item.status === 'ajustar'" type="checkbox" [(ngModel)]="item.selecionada" class="h-4 w-4 accent-cyan-400" />
+              <span class="font-bold text-white">{{ info[item.identidade].label }} · {{ item.nome }}</span>
+            </label>
+            <span class="text-[11px] font-bold uppercase rounded-md px-2 py-1"
+              [ngClass]="item.status === 'ajustar' ? 'bg-cyan-400/20 text-cyan-400' : item.status === 'manter' ? 'bg-green-500/20 text-green-300' : 'bg-white/10 text-white/60'">
+              {{ statusLabel(item) }}
+            </span>
+          </div>
+
+          <p class="text-sm text-white/80">
+            {{ formatNumber(item.doseAtual) }} → <b class="text-white">{{ formatNumber(item.doseNova) }}</b> ml/dia
+            <span class="text-white/50" *ngIf="item.doseCalculada !== item.doseNova">(calculado {{ formatNumber(item.doseCalculada) }})</span>
+          </p>
+
+          <p *ngIf="item.consumoDia !== undefined" class="text-xs text-white/60">
+            Consumo ≈ {{ formatNumber(item.consumoDia, 3) }} {{ item.unidade }}/dia ·
+            variação no teste {{ formatNumber(item.derivaDia, 3) }} {{ item.unidade }}/dia
+            <ng-container *ngIf="item.desvioDia">· arredondamento {{ item.desvioDia > 0 ? '+' : '' }}{{ formatNumber(item.desvioDia, 3) }} {{ item.unidade }}/dia</ng-container>
+          </p>
+
+          <div *ngIf="item.horarios.length" class="flex flex-wrap gap-2">
+            <span *ngFor="let horario of item.horarios" class="text-xs rounded-lg bg-white/5 border border-white/10 px-2 py-1 text-white/80">
+              {{ horario.hora }}: {{ formatNumber(horario.antes, 1) }} → <b>{{ formatNumber(horario.depois, 1) }}</b> ml
+            </span>
+          </div>
+
+          <p *ngFor="let mensagem of item.mensagens" class="text-xs text-white/60">{{ mensagem }}</p>
+        </div>
+
+        <p *ngIf="!result.ajustes.length" class="text-sm text-white/60">Nenhuma bomba com tipo KH, Cálcio ou Magnésio cadastrada.</p>
+
+        <button type="button" (click)="apply()" [disabled]="busy || !result.ajustes.length"
+          class="w-full h-12 rounded-xl btn-outline bg-cyan-400/10 font-bold tracking-wider hover:bg-cyan-400/20 disabled:opacity-50">
+          {{ selectedCount ? 'Aplicar ' + selectedCount + ' ajuste(s) e iniciar próximo ciclo' : 'Salvar resultado e iniciar próximo ciclo' }}
+        </button>
+      </div>
+
+      <!-- Histórico -->
+      <div *ngIf="history.length" class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl space-y-3">
+        <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Histórico</p>
+        <div *ngFor="let item of history" class="border-b border-white/5 pb-3 last:border-0 text-sm space-y-1">
+          <p class="text-white/80 font-semibold">{{ formatDate(item.inicio) }} → {{ formatDate(item.fim) }}</p>
+          <p class="text-white/60">
+            <ng-container *ngFor="let param of measuredKeys(item.medidasFim); let last = last">
+              {{ param }} {{ formatNumber(item.medidasInicio[param]) }} → {{ formatNumber(item.medidasFim?.[param]) }}{{ last ? '' : ' · ' }}
+            </ng-container>
+          </p>
+          <p *ngFor="let change of appliedEntries(item)" class="text-xs text-cyan-400/80">
+            {{ pumpName(change.pumpId) }}: {{ formatNumber(change.antes) }} → {{ formatNumber(change.depois) }} ml/dia
+          </p>
+        </div>
+      </div>
+    </ng-container>
+  </div>
+
+  <ion-toast [isOpen]="toastOpen" [message]="toastMessage" duration="2500" (didDismiss)="toastOpen = false"></ion-toast>
+</ion-content>

@@ -30,6 +30,9 @@
 #define LOG_LIMIT 300
 #define LOG_FILE "/logs.jsonl"
 #define LOG_TEMP_FILE "/logs.tmp"
+#define DOSING_FILE "/dosing.json"
+#define DOSING_TEMP_FILE "/dosing.tmp"
+#define DOSING_MAX_SIZE 16384
 
 const uint8_t PUMP_PINS[BOMBA_COUNT] = {BOMBA1_PIN, BOMBA2_PIN, BOMBA3_PIN, BOMBA4_PIN, BOMBA5_PIN};
 
@@ -175,6 +178,8 @@ void handlePostTime(AsyncWebServerRequest *request);
 void handlePostDose(AsyncWebServerRequest *request);
 void handleGetLogs(AsyncWebServerRequest *request);
 void handleDeleteLogs(AsyncWebServerRequest *request);
+void handleGetDosing(AsyncWebServerRequest *request);
+void handlePostDosing(AsyncWebServerRequest *request);
 void storeRequestBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
 bool readRequestBody(AsyncWebServerRequest *request, String &body);
 
@@ -615,6 +620,87 @@ void handleDeleteLogs(AsyncWebServerRequest *request)
   request->send(200, "application/json", "{\"ok\":true}");
 }
 
+// Perfis de produto, aquário e histórico de testes do Ajuste de Dosagem.
+// O firmware só armazena o JSON; o schema pertence ao app.
+void handleGetDosing(AsyncWebServerRequest *request)
+{
+  Serial.println("[http] Recebido: GET /dosing");
+  if (!fsReady)
+  {
+    request->send(503, "application/json", "{\"ok\":false,\"message\":\"filesystem indisponivel\"}");
+    return;
+  }
+
+  if (!LittleFS.exists(DOSING_FILE))
+  {
+    request->send(200, "application/json", "{}");
+    return;
+  }
+
+  request->send(LittleFS, DOSING_FILE, "application/json");
+}
+
+void handlePostDosing(AsyncWebServerRequest *request)
+{
+  Serial.println("[http] Recebido: POST /dosing");
+  if (!fsReady)
+  {
+    request->send(503, "application/json", "{\"ok\":false,\"message\":\"filesystem indisponivel\"}");
+    return;
+  }
+
+  String body;
+  if (!readRequestBody(request, body))
+  {
+    Serial.println("[http] ERRO: Body ausente em /dosing");
+    request->send(400, "application/json", "{\"ok\":false,\"message\":\"body ausente\"}");
+    return;
+  }
+
+  if (body.length() > DOSING_MAX_SIZE)
+  {
+    Serial.printf("[http] ERRO: /dosing com %u bytes excede o limite\n", static_cast<unsigned int>(body.length()));
+    request->send(413, "application/json", "{\"ok\":false,\"message\":\"dados muito grandes\"}");
+    return;
+  }
+
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, body);
+  if (error || !doc.is<JsonObject>())
+  {
+    Serial.println("[http] JSON Invalido em /dosing");
+    request->send(400, "application/json", "{\"ok\":false,\"message\":\"json invalido\"}");
+    return;
+  }
+
+  File output = LittleFS.open(DOSING_TEMP_FILE, FILE_WRITE);
+  if (!output)
+  {
+    request->send(500, "application/json", "{\"ok\":false,\"message\":\"falha ao gravar\"}");
+    return;
+  }
+  size_t written = output.print(body);
+  output.close();
+
+  if (written != body.length())
+  {
+    LittleFS.remove(DOSING_TEMP_FILE);
+    request->send(500, "application/json", "{\"ok\":false,\"message\":\"falha ao gravar\"}");
+    return;
+  }
+
+  LittleFS.remove(DOSING_FILE);
+  if (!LittleFS.rename(DOSING_TEMP_FILE, DOSING_FILE))
+  {
+    Serial.println("[dosing] ERRO: Falha ao substituir arquivo de dosagem");
+    request->send(500, "application/json", "{\"ok\":false,\"message\":\"falha ao gravar\"}");
+    return;
+  }
+
+  Serial.printf("[dosing] Dados salvos (%u bytes)\n", static_cast<unsigned int>(written));
+  request->send(200, "application/json", "{\"ok\":true}");
+}
+
 void setupServer()
 {
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
@@ -633,6 +719,8 @@ void setupServer()
   server.on("/dose", HTTP_POST, handlePostDose, nullptr, storeRequestBody);
   server.on("/logs", HTTP_GET, handleGetLogs);
   server.on("/logs", HTTP_DELETE, handleDeleteLogs);
+  server.on("/dosing", HTTP_GET, handleGetDosing);
+  server.on("/dosing", HTTP_POST, handlePostDosing, nullptr, storeRequestBody);
 
   server.onNotFound([](AsyncWebServerRequest *request) {
     Serial.printf("[http] 404/Options: %s %s\n",

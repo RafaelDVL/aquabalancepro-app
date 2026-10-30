@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+import { CommonModule, DatePipe } from '@angular/common';
 import { Component } from '@angular/core';
 import { Router } from '@angular/router';
 import {
@@ -22,10 +22,15 @@ import {
   refreshCircle,
   statsChart,
   beakerOutline,
+  flaskOutline,
 } from 'ionicons/icons';
 
 import { firstValueFrom, interval, Subscription } from 'rxjs';
 import { DeviceStatus, DoserService } from '../services/doser.service';
+import { MissedDose, findMissedDoses } from '../services/dose-check';
+import { daysBetween } from '../services/dosing-advisor';
+import { openSession } from '../services/dosing.models';
+import { DoseNotificationsService } from '../services/dose-notifications.service';
 
 @Component({
   selector: 'app-home',
@@ -33,6 +38,7 @@ import { DeviceStatus, DoserService } from '../services/doser.service';
   standalone: true, // <--- ADICIONEI ISTO AQUI (Importante!)
   imports: [
     CommonModule,
+    DatePipe,
     IonContent,
     IonIcon,
     IonSpinner,
@@ -46,17 +52,26 @@ export class HomePage {
   toastMessage = '';
   toastOpen = false;
   isConnectedToDevice = false; // Indica se o app consegue alcançar o dispositivo
+  testDue = false;
+  missedDoses: MissedDose[] = [];
+  private readonly lastCheckKey = 'abp-ultima-conferencia';
+  private dosingChecked = false;
   // Polling para manter Wi-Fi e hora atualizados
   private pollingSub?: Subscription;
   private pollingBusy = false;
   readonly statusPollMs = 15000; // 15s: bom equilíbrio entre responsividade e consumo
 
-  constructor(private readonly doser: DoserService, private readonly router: Router) {
+  constructor(
+    private readonly doser: DoserService,
+    private readonly router: Router,
+    private readonly notifications: DoseNotificationsService,
+  ) {
     // Registra os ícones para que apareçam no HTML
-    addIcons({timeOutline,wifi,refreshCircle,settingsSharp,statsChart,receiptOutline,cloud,beakerOutline});
+    addIcons({timeOutline,wifi,refreshCircle,settingsSharp,statsChart,receiptOutline,cloud,beakerOutline,flaskOutline});
   }
 
   ionViewWillEnter(): void {
+    this.dosingChecked = false;
     void this.refreshStatus();
     this.startPolling();
   }
@@ -76,6 +91,7 @@ export class HomePage {
 
       this.canConfigure = true;
       this.isConnectedToDevice = true;
+      void this.checkDosing();
     } catch (error) {
       this.toastMessage = error instanceof Error ? error.message : 'Falha ao consultar o dispositivo.';
       this.toastOpen = true;
@@ -139,5 +155,40 @@ export class HomePage {
 
   openCalibracao(): void {
     void this.router.navigateByUrl('/calibracao');
+  }
+
+  openAjuste(): void {
+    void this.router.navigateByUrl('/ajuste');
+  }
+
+  dismissMissedDoses(): void {
+    this.missedDoses = [];
+  }
+
+  // Uma vez por entrada na tela: selo do teste, conferência do log e reagendamento das notificações
+  private async checkDosing(): Promise<void> {
+    if (this.dosingChecked) return;
+    this.dosingChecked = true;
+    try {
+      const bombs = await firstValueFrom(this.doser.getConfig());
+      const data = await firstValueFrom(this.doser.getDosingData(bombs.map((bomb) => bomb.id)));
+      const session = openSession(data);
+      this.testDue = !!session && daysBetween(new Date(session.inicio), new Date()) >= session.diasPlanejados;
+      void this.notifications.sync(bombs, data);
+
+      const logs = await firstValueFrom(this.doser.getLogs());
+      const now = new Date();
+      let since: Date | null = null;
+      try {
+        const stored = localStorage.getItem(this.lastCheckKey);
+        since = stored ? new Date(stored) : null;
+        localStorage.setItem(this.lastCheckKey, now.toISOString());
+      } catch {
+        // sem storage: confere os últimos 7 dias
+      }
+      this.missedDoses = findMissedDoses(bombs, logs, since, now);
+    } catch {
+      // firmware sem /dosing ou falha de rede: a home segue sem os avisos
+    }
   }
 }

@@ -24,6 +24,14 @@ export const routes: Routes = [
     loadComponent: () => import('./analytics/analytics.page').then((m) => m.AnalyticsPage),
   },
   {
+    path: 'ajuste',
+    loadComponent: () => import('./ajuste/ajuste.page').then((m) => m.AjustePage),
+  },
+  {
+    path: 'produtos',
+    loadComponent: () => import('./produtos/produtos.page').then((m) => m.ProdutosPage),
+  },
+  {
     path: '',
     redirectTo: 'home',
     pathMatch: 'full',

@@ -63,6 +63,8 @@ O ESP32 expõe um servidor HTTP na porta `80` no IP `192.168.4.1`. O app se comu
 | `POST` | `/dose` | Dosagem manual imediata |
 | `GET` | `/logs` | Histórico de dosagens |
 | `DELETE` | `/logs` | Limpar histórico |
+| `GET` | `/dosing` | Produtos, aquário e histórico do Ajuste de Dosagem (`{}` se vazio) |
+| `POST` | `/dosing` | Salva os dados do Ajuste de Dosagem (JSON até 16 KB) |
 
 ## Fluxo de Uso
 

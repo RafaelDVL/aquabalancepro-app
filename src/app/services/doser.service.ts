@@ -1,7 +1,8 @@
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable, catchError, from, map, of, switchMap } from 'rxjs';
+import { Observable, catchError, from, map, of, switchMap, throwError } from 'rxjs';
 import { WifiBindingService } from './wifi-binding.service';
+import { DosingData, normalizeDosingData } from './dosing.models';
 
 export interface ScheduleConfig {
   id: number;
@@ -157,6 +158,31 @@ export class DoserService {
   clearLogs(): Observable<ApiStatusResponse> {
     return this.withWifiBinding(
       this.http.delete<ApiStatusResponse>(`${this.apiUrl}/logs`),
+    );
+  }
+
+  getDosingData(pumpIds: number[]): Observable<DosingData> {
+    return this.withWifiBinding(
+      this.http.get<unknown>(`${this.apiUrl}/dosing`).pipe(
+        map((raw) => normalizeDosingData(raw, pumpIds)),
+        catchError((error: HttpErrorResponse) =>
+          throwError(() =>
+            error.status === 404
+              ? new Error('O firmware do ESP32 ainda não tem o Ajuste de Dosagem. Grave o firmware novo.')
+              : error,
+          ),
+        ),
+      ),
+    );
+  }
+
+  saveDosingData(data: DosingData): Observable<ApiStatusResponse> {
+    return this.withWifiBinding(
+      this.http.post<ApiStatusResponse>(
+        `${this.apiUrl}/dosing`,
+        JSON.stringify(data),
+        { headers: this.plainJsonHeaders },
+      ),
     );
   }
 

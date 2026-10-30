@@ -338,6 +338,22 @@ Limpa todo o histórico.
 { "ok": true, "message": "logs apagados" }
 ```
 
+---
+
+#### `GET /dosing`
+
+Devolve `/dosing.json` do LittleFS: perfis de produto, volume/alvos do aquário e histórico de testes do
+Ajuste de Dosagem. Sem arquivo → `{}`. O firmware não interpreta o conteúdo; o schema é do app
+(`src/app/services/dosing.models.ts`).
+
+#### `POST /dosing`
+
+Valida que o body é um objeto JSON (máx. `DOSING_MAX_SIZE` = 16 KB → senão 413) e grava de forma atômica
+(`/dosing.tmp` → rename para `/dosing.json`).
+
+**Resposta (200):** `{ "ok": true }` · erros: 400 (JSON inválido), 413 (grande demais), 500 (falha ao gravar),
+503 (LittleFS indisponível).
+
 ### Tratamento de Erros Comum
 
 | Situação | HTTP Status | Resposta |
@@ -385,6 +401,11 @@ Limpa todo o histórico.
   2. Abre `logs.tmp` para escrita
   3. Escreve apenas as últimas `LOG_LIMIT` linhas
   4. Remove original, renomeia `.tmp`
+
+### LittleFS (Ajuste de Dosagem)
+
+- **Arquivo:** `/dosing.json` (temporário `/dosing.tmp`), escrito só por `POST /dosing`
+- Fica fora do NVS porque a string de config das bombas já ocupa boa parte do limite de ~4 KB
 
 ## Dosing Engine
 

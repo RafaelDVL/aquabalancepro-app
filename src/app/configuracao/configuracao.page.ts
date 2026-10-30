@@ -21,6 +21,10 @@ import {
   IonToolbar } from '@ionic/angular/standalone';
 import { firstValueFrom } from 'rxjs';
 import { BombConfig, DoserService, ScheduleConfig } from '../services/doser.service';
+import { DoseNotificationsService } from '../services/dose-notifications.service';
+import { Suggestion, evaluateRules } from '../services/dosing-rules';
+
+const SCHEDULE_RULES = ['espaco-', 'dose-concentrada-', 'teto-diario-', 'kh-noite-', 'estoque-'];
 
 
 interface ScheduleForm extends ScheduleConfig {
@@ -68,6 +72,7 @@ export class ConfiguracaoPage {
   toastMessage = '';
   toastOpen = false;
   openColorPickerId: number | null = null;
+  ruleWarnings: Suggestion[] = [];
   readonly doseMin = 0.5;
   readonly doseMax = 15;
   readonly doseStep = 0.5;
@@ -95,7 +100,11 @@ export class ConfiguracaoPage {
     '#ff0000',
   ];
 
-  constructor(private readonly doser: DoserService, private readonly router: Router) {
+  constructor(
+    private readonly doser: DoserService,
+    private readonly router: Router,
+    private readonly notifications: DoseNotificationsService,
+  ) {
     addIcons({ power, cloudUploadOutline });
   }
 
@@ -176,10 +185,24 @@ export class ConfiguracaoPage {
       await firstValueFrom(this.doser.saveConfig(payload));
       this.toastMessage = 'Configuracoes salvas com sucesso.';
       this.toastOpen = true;
+      void this.checkRules(payload);
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : 'Falha ao salvar configuracoes.';
     } finally {
       this.saving = false;
+    }
+  }
+
+  // Avisos não bloqueantes sobre a agenda salva + reagendamento das notificações
+  private async checkRules(bombs: BombConfig[]): Promise<void> {
+    try {
+      const data = await firstValueFrom(this.doser.getDosingData(bombs.map((bomb) => bomb.id)));
+      this.ruleWarnings = evaluateRules({ bombs, data, now: new Date() }).filter((suggestion) =>
+        SCHEDULE_RULES.some((prefix) => suggestion.id.startsWith(prefix)),
+      );
+      void this.notifications.sync(bombs, data);
+    } catch {
+      this.ruleWarnings = [];
     }
   }
 

@@ -78,7 +78,7 @@ bootstrapApplication(AppComponent, {
 });
 ```
 
-### Roteamento (5 rotas lazy-loaded)
+### Roteamento (7 rotas lazy-loaded)
 
 Definido em `app.routes.ts`:
 
@@ -237,6 +237,32 @@ interface DailyDataPoint {
 5. Segment para trocar entre bombas
 6. Overlay customizado: linha de hora atual com plugin Chart.js
 
+### 6. AjustePage — Ajuste de Dosagem (`/ajuste`)
+
+Ciclo semanal: o usuário mede KH e Ca (Mg opcional), escolhe o período (3/5/7/10/14 dias), mede de novo e o app
+calcula a nova dose diária de cada bomba.
+- Cálculo em `services/dosing-advisor.ts`: potência efetiva (`eleva × porLitros / volume / doseMl`), consumo
+  (`doseInício × potência − variação/dia`), correção rumo ao alvo limitada por subida máxima/dia e trava de ±30 %
+  por ciclo. A dose é repartida nos horários ativos em passos de 0,5 ml (maior resto), sem furar a trava.
+- Bombas sem teste (K, carbono) seguem outra bomba por um fator (`vinculo`).
+- Card de sugestões (`services/dosing-rules.ts`): KH e Ca a menos de N min, dose de KH concentrada, teto diário,
+  KH com luz acesa (se houver fotoperíodo), estoque baixo, Mg/Ca, teste vencido, cadastro incompleto e relógio do
+  ESP32 fora de sincronia. Correções (mover horário, sincronizar relógio) só com confirmação.
+- **Aplicar** grava as doses (`POST /config`), fecha a sessão no histórico e abre a próxima com as medidas finais.
+
+### 7. ProdutosPage — Produtos (`/produtos`)
+
+Volume e alvos do aquário, fotoperíodo, e por bomba: tipo (KH, Ca, Mg, K, Carbono, Outro), produto, potência do
+rótulo, vínculo com outra bomba, limites e regras. Tudo salvo no ESP32 via `GET/POST /dosing`.
+
+### Notificações locais (`services/dose-notifications.service.ts`)
+
+Só no Android (`@capacitor/local-notifications`). O celular agenda sozinho, sem falar com o ESP32:
+- uma notificação semanal por horário ativo × dia ("Dosagem programada — Cálcio (Bomba 2): 4,0 ml");
+- o lembrete de fim do teste.
+Reagenda ao abrir Home/Ajuste, salvar Configuração/Produtos e aplicar ajustes. Usa `SCHEDULE_EXACT_ALARM`
+(Android 12+). A Home também confere os logs (`services/dose-check.ts`) e lista doses programadas sem registro.
+
 ## Serviços
 
 ### DoserService (`services/doser.service.ts`)
@@ -391,9 +417,12 @@ Tema escuro fixo, definido em `theme/variables.scss`:
 | Arquivo | Teste |
 |---|---|
 | `app.component.spec.ts` | Deve criar o componente |
-| `home.page.spec.ts` | Deve criar a página |
+| `home.page.spec.ts` | Deve criar a página (falha hoje: falta `HttpClient` no TestBed) |
+| `services/dosing-advisor.spec.ts` | Cálculo do ajuste e repartição em 0,5 ml |
+| `services/dosing-rules.spec.ts` | Regras e sugestões |
+| `services/dose-check.spec.ts` | Conferência de doses no log |
 
-**Não há testes** para: serviços (`DoserService`, `WifiBindingService`), demais páginas, pipes, diretivas, ou integração HTTP.
+**Não há testes** para: `DoserService`, `WifiBindingService`, demais páginas, pipes, diretivas, ou integração HTTP.
 
 ## Fluxos de Usuário
 
