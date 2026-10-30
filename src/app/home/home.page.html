@@ -4,9 +4,9 @@
     <div class="absolute inset-0 bg-gradient-to-b from-[#05161A]/60 via-[#05161A]/80 to-[#05161A]"></div>
   </div>
 
-  <div class="relative z-10 flex flex-col min-h-full px-6 pt-12 pb-8">
+  <div class="relative z-10 flex flex-col min-h-full px-5 pt-12 pb-8 space-y-4">
 
-    <div class="mb-4 animate-fade-in-down">
+    <div class="animate-fade-in-down">
       <h1 class="text-4xl font-black text-white tracking-tighter drop-shadow-lg">
         Aqua<span class="text-neon-cyan">Balance</span>
       </h1>
@@ -15,151 +15,173 @@
       </p>
     </div>
 
-    <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl mb-3 relative overflow-hidden group">
-      <div
-        class="absolute -top-10 -right-10 w-32 h-32 bg-neon-cyan/20 rounded-full blur-3xl group-hover:bg-neon-cyan/30 transition-all duration-700">
-      </div>
+    <!-- Dispositivo -->
+    <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl relative overflow-clip">
+      <div class="absolute -top-10 -right-10 w-32 h-32 rounded-full blur-3xl"
+        [ngClass]="isConnectedToDevice ? 'bg-neon-cyan/20' : 'bg-red-500/10'"></div>
 
-      <div class="relative z-10">
-        <div class="flex justify-between items-start mb-4">
-          <div>
-            <p class="text-[10px] font-bold uppercase tracking-widest text-white/50 mb-1">Dispositivo Conectado</p>
-            <h2 class="text-2xl font-bold text-white">{{ deviceName }}</h2>
-            <div class="flex items-center gap-2 mt-1">
-              <ion-icon name="time-outline" class="text-neon-cyan text-sm"></ion-icon>
-              <span class="text-xs text-white/80 font-mono">
-                {{ status?.time || '--:--' }}
-              </span>
-            </div>
-          </div>
-
-          <div class="flex flex-col gap-2 items-end">
-            <div
-              class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 border border-white/5 transition-all"
-              [ngClass]="{'border-green-500/50 bg-green-500/10': isConnectedToDevice}">
-              <span class="text-[10px] font-bold text-white/80">Wi-Fi</span>
-              <div class="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]"
-                [ngClass]="isConnectedToDevice ? 'bg-green-400 text-green-400 animate-pulse' : 'bg-red-500 text-red-500'">
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div *ngIf="status?.apIp"
-          class="inline-flex items-center gap-2 px-3 py-1 bg-white/5 rounded-lg border border-white/5">
-          <ion-icon name="wifi" class="text-neon-cyan text-xs"></ion-icon>
-          <span class="text-xs font-mono text-white/80">{{ status?.apIp }}</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="grid grid-cols-2 gap-4 mb-2">
-
-      <button (click)="refreshStatus()" [disabled]="isLoading" class="col-span-2 relative h-14 rounded-2xl overflow-hidden transition-all duration-300 active:scale-95 group
-                 border border-neon-cyan/30 bg-neon-cyan/10 backdrop-blur-md
-                 hover:bg-neon-cyan/20 hover:border-neon-cyan/60 hover:shadow-[0_0_25px_rgba(34,211,238,0.15)]
-                 disabled:opacity-50 disabled:cursor-not-allowed">
-
-        <div
-          class="absolute -inset-full top-0 block h-full w-1/2 -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-20 group-hover:animate-shine">
-        </div>
-
-        <div class="flex items-center justify-center gap-4 relative z-10 h-full">
-
-          <div class="relative">
-            <ion-spinner *ngIf="isLoading" name="crescent" class="text-neon-cyan w-10 h-10"></ion-spinner>
-
-            <div *ngIf="!isLoading"
-              class="w-12 h-12 rounded-full bg-neon-cyan/10 border border-neon-cyan/20 flex items-center justify-center group-hover:scale-110 group-hover:bg-neon-cyan/20 transition-all duration-300">
-              <ion-icon name="refresh-circle"
-                class="text-3xl text-neon-cyan drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]"></ion-icon>
-            </div>
-          </div>
-
-          <div class="flex flex-col items-start text-left">
-            <span class="text-lg font-bold text-white tracking-wide group-hover:text-neon-cyan transition-colors">
-              {{ isLoading ? 'Sincronizando...' : 'Atualizar Status' }}
-            </span>
-            <span class="text-xs text-white/50 font-medium">
-              Conectar ao Dispositivo
+      <div class="relative z-10 flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-[10px] font-bold uppercase tracking-widest mb-1"
+            [ngClass]="isConnectedToDevice ? 'text-green-400/80' : isLoading ? 'text-white/50' : 'text-red-400/80'">
+            {{ isConnectedToDevice ? 'Conectado' : isLoading ? 'Conectando…' : 'Desconectado' }}
+          </p>
+          <h2 class="text-2xl font-bold text-white truncate">{{ deviceName }}</h2>
+          <div *ngIf="isConnectedToDevice" class="flex items-center gap-2 mt-1">
+            <ion-icon name="time-outline" class="text-sm"
+              [ngClass]="clockDriftMin !== null && (clockDriftMin > 2 || clockDriftMin < -2) ? 'text-amber-300' : 'text-neon-cyan'"></ion-icon>
+            <span class="text-xs text-white/80 font-mono">{{ deviceClock }}</span>
+            <span class="text-xs"
+              [ngClass]="clockDriftMin !== null && (clockDriftMin > 2 || clockDriftMin < -2) ? 'text-amber-300' : 'text-white/50'">
+              · {{ clockLabel }}
             </span>
           </div>
-
+          <p *ngIf="!isConnectedToDevice && !isLoading" class="text-xs text-white/60 mt-1">
+            O app não encontrou o ESP32 nesta rede.
+          </p>
         </div>
-      </button>
 
-      <button *ngIf="canConfigure" (click)="openConfig()"
-        class="bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 hover:border-white/20 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 active:scale-95 transition-all h-36 group shadow-lg">
-        <div
-          class="w-14 h-14 rounded-full bg-gradient-to-br from-white/5 to-white/0 border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:border-neon-cyan/50 transition-all duration-300">
-          <ion-icon name="settings-sharp" class="text-2xl text-neon-cyan/80 group-hover:text-neon-cyan"></ion-icon>
-        </div>
-        <span class="text-sm font-bold text-white/90 group-hover:text-white">Configurar</span>
-      </button>
-
-      <button *ngIf="canConfigure" (click)="openAnalytics()"
-        class="bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 hover:border-white/20 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 active:scale-95 transition-all h-36 group shadow-lg">
-        <div
-          class="w-14 h-14 rounded-full bg-gradient-to-br from-white/5 to-white/0 border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:border-blue-400/50 transition-all duration-300">
-          <ion-icon name="stats-chart" class="text-2xl text-blue-400/80 group-hover:text-blue-400"></ion-icon>
-        </div>
-        <span class="text-sm font-bold text-white/90 group-hover:text-white">Analytics</span>
-      </button>
-
-      <button *ngIf="canConfigure" (click)="openLogs()"
-        class="bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 hover:border-white/20 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 active:scale-95 transition-all h-36 group shadow-lg">
-        <div
-          class="w-14 h-14 rounded-full bg-gradient-to-br from-white/5 to-white/0 border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:border-purple-400/50 transition-all duration-300">
-          <ion-icon name="receipt-outline" class="text-2xl text-purple-400/80 group-hover:text-purple-400"></ion-icon>
-        </div>
-        <span class="text-sm font-bold text-white/90 group-hover:text-white">Logs</span>
-      </button>
-
-      <button *ngIf="canConfigure" (click)="openCalibracao()"
-        class="bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 hover:border-white/20 rounded-2xl p-4 flex flex-col items-center justify-center gap-3 active:scale-95 transition-all h-36 group shadow-lg">
-        <div
-          class="w-14 h-14 rounded-full bg-gradient-to-br from-white/5 to-white/0 border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:border-teal-400/50 transition-all duration-300">
-          <ion-icon name="beaker-outline" class="text-2xl text-teal-400/80 group-hover:text-teal-400"></ion-icon>
-        </div>
-        <span class="text-sm font-bold text-white/90 group-hover:text-white">Calibração</span>
-      </button>
-
-      <button *ngIf="canConfigure" (click)="openAjuste()"
-        class="col-span-2 relative bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 hover:border-white/20 rounded-2xl p-4 flex items-center justify-center gap-4 active:scale-95 transition-all h-20 group shadow-lg">
-        <div
-          class="w-12 h-12 rounded-full bg-gradient-to-br from-white/5 to-white/0 border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:border-amber-400/50 transition-all duration-300">
-          <ion-icon name="flask-outline" class="text-2xl text-amber-400/80 group-hover:text-amber-400"></ion-icon>
-        </div>
-        <span class="text-sm font-bold text-white/90 group-hover:text-white">Ajuste de Dosagem</span>
-        <span *ngIf="testDue"
-          class="absolute top-2 right-3 text-[10px] font-bold uppercase rounded-md px-2 py-1 bg-amber-400/20 text-amber-300">Hora de medir</span>
-      </button>
-    </div>
-
-    <div *ngIf="missedDoses.length" class="mb-2 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-4 text-sm text-amber-50 space-y-2">
-      <div class="flex items-center justify-between">
-        <span class="font-bold">{{ missedDoses.length }} dose(s) programada(s) sem registro no log</span>
-        <button type="button" (click)="dismissMissedDoses()" class="text-xs underline">Ok</button>
+        <button type="button" (click)="refreshStatus()" [disabled]="isLoading" aria-label="Atualizar status"
+          class="shrink-0 h-10 w-10 rounded-full border border-neon-cyan/40 bg-neon-cyan/10 flex items-center justify-center text-neon-cyan active:scale-90 transition disabled:opacity-60">
+          <ion-spinner *ngIf="isLoading" name="crescent" class="w-5 h-5 text-neon-cyan"></ion-spinner>
+          <ion-icon *ngIf="!isLoading" name="refresh" class="text-xl"></ion-icon>
+        </button>
       </div>
-      <p *ngFor="let dose of missedDoses.slice(0, 5)" class="text-xs text-amber-100/80">
-        {{ dose.nome }} · {{ dose.quando | date: 'dd/MM HH:mm' }} · {{ dose.dosagem }} ml
-      </p>
-      <p class="text-[11px] text-amber-100/60">Pode ser ESP32 desligado, relógio errado ou fila cheia.</p>
     </div>
 
-    <div class="mt-auto space-y-4 pb-6">
-      <div class="bg-black/40 rounded-xl p-4 border border-white/5">
-        <div class="flex items-center gap-3 mb-2">
-          <div class="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold text-white">?
+    <!-- Atenção -->
+    <div *ngIf="isConnectedToDevice && alerts.length"
+      class="rounded-2xl border border-amber-400/40 bg-amber-400/10 backdrop-blur-md p-4 space-y-3">
+      <div class="flex items-center gap-2">
+        <ion-icon name="alert-circle-outline" class="text-amber-300 text-lg"></ion-icon>
+        <span class="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-200">Atenção</span>
+      </div>
+      <div *ngFor="let alert of alerts" class="flex items-start gap-3 border-t border-amber-400/15 pt-3 first-of-type:border-0 first-of-type:pt-0">
+        <div class="flex-1 min-w-0 space-y-1">
+          <p class="text-sm text-amber-50">{{ alert.mensagem }}</p>
+          <p *ngFor="let detalhe of alert.detalhes" class="text-xs text-amber-100/70">{{ detalhe }}</p>
+        </div>
+        <button *ngIf="alert.acao" type="button" (click)="runAlert(alert)"
+          class="shrink-0 px-3 py-1.5 rounded-lg border border-amber-300/60 text-amber-200 text-xs font-bold hover:bg-amber-300/10">
+          {{ alert.acaoLabel }}
+        </button>
+        <button *ngIf="!alert.acao" type="button" (click)="dismissAlert(alert)"
+          class="shrink-0 px-3 py-1.5 rounded-lg text-amber-200/80 text-xs font-semibold underline">
+          Ok
+        </button>
+      </div>
+    </div>
+
+    <!-- Hoje -->
+    <div *ngIf="isConnectedToDevice && today"
+      class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl space-y-4">
+      <div class="flex items-baseline justify-between">
+        <span class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Hoje</span>
+        <span class="text-xs font-semibold text-white/80" *ngIf="today.total">
+          {{ today.feitas }} de {{ today.total }} doses feitas
+        </span>
+      </div>
+
+      <p *ngIf="!today.total" class="text-sm text-white/60">Nenhuma dose programada para hoje.</p>
+
+      <div *ngFor="let pump of today.pumps" class="space-y-1.5">
+        <div class="flex items-center gap-2">
+          <span class="h-2.5 w-2.5 rounded-full shrink-0" [style.backgroundColor]="pumpColor(pump.pumpId)"></span>
+          <span class="text-sm font-semibold text-white truncate flex-1">{{ pump.nome }}</span>
+          <span class="text-[11px]"
+            [ngClass]="pump.diasEstoque !== null && pump.diasEstoque < 7 ? 'text-amber-300' : 'text-white/40'">
+            {{ pump.diasEstoque !== null ? '~' + pump.diasEstoque + ' dias de estoque' : 'estoque não informado' }}
+          </span>
+        </div>
+        <div class="flex flex-wrap gap-1.5 pl-4">
+          <span *ngFor="let dose of pump.doses"
+            class="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-mono border"
+            [ngClass]="dose.estado === 'feita'
+              ? 'border-green-400/30 bg-green-400/10 text-green-300'
+              : dose.estado === 'perdida'
+                ? 'border-amber-400/40 bg-amber-400/10 text-amber-200'
+                : 'border-white/10 bg-white/5 text-white/70'">
+            <ion-icon *ngIf="dose.estado === 'feita'" name="checkmark-circle" class="text-[13px]"></ion-icon>
+            {{ dose.hora }}
+            <span class="font-sans">{{ dose.estado === 'perdida' ? 'sem registro' : '' }}</span>
+          </span>
+        </div>
+      </div>
+
+      <div *ngIf="today.proxima" class="flex items-center gap-2 rounded-xl bg-black/30 border border-white/5 px-3 py-2.5">
+        <span class="h-2 w-2 rounded-full animate-pulse" [style.backgroundColor]="pumpColor(today.proxima.pumpId)"></span>
+        <span class="text-sm text-white/80 flex-1">
+          Próxima: <b class="text-white">{{ today.proxima.nome }}</b> {{ today.proxima.amanha ? 'amanhã' : '' }} às {{ today.proxima.hora }}
+          ({{ today.proxima.dosagem.toLocaleString('pt-BR') }} ml)
+        </span>
+        <span class="text-xs font-semibold text-neon-cyan">{{ countdown(today.proxima.emMinutos) }}</span>
+      </div>
+    </div>
+
+    <!-- Menu -->
+    <div *ngIf="canConfigure" class="space-y-3">
+      <div class="grid grid-cols-2 gap-3">
+        <button (click)="openConfig()"
+          class="bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 rounded-2xl p-4 flex flex-col items-center justify-center gap-2.5 active:scale-95 transition-all h-28 group shadow-lg">
+          <div class="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center group-hover:border-neon-cyan/50 transition">
+            <ion-icon name="settings-sharp" class="text-2xl text-neon-cyan"></ion-icon>
           </div>
-          <span class="text-sm font-bold text-white/90">Guia Rápido</span>
-        </div>
-        <ol class="text-xs text-white/60 space-y-1 ml-9 list-disc">
-          <li>Conecte no Wi-Fi do dispositivo</li>
-          <li>Toque em <b>Atualizar Status</b></li>
-          <li>Configure suas bombas</li>
-        </ol>
+          <span class="text-sm font-bold text-white/90">Configurar</span>
+        </button>
+
+        <button (click)="openAjuste()"
+          class="relative bg-white/5 backdrop-blur-md border hover:bg-white/10 rounded-2xl p-4 flex flex-col items-center justify-center gap-2.5 active:scale-95 transition-all h-28 group shadow-lg"
+          [ngClass]="testDue ? 'border-amber-400/50' : 'border-white/10'">
+          <div class="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center group-hover:border-amber-400/50 transition">
+            <ion-icon name="flask-outline" class="text-2xl text-amber-400"></ion-icon>
+          </div>
+          <span class="text-sm font-bold text-white/90">Ajuste de Dosagem</span>
+          <span *ngIf="testDue"
+            class="absolute top-2 right-2 text-[9px] font-bold uppercase rounded-md px-1.5 py-0.5 bg-amber-400/20 text-amber-300">Hora de medir</span>
+        </button>
+
+        <button (click)="openAnalytics()"
+          class="bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 rounded-2xl px-4 flex items-center gap-3 active:scale-95 transition-all h-16 shadow-lg">
+          <ion-icon name="stats-chart" class="text-xl text-blue-400"></ion-icon>
+          <span class="text-sm font-bold text-white/90">Analytics</span>
+        </button>
+
+        <button (click)="openLogs()"
+          class="bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 rounded-2xl px-4 flex items-center gap-3 active:scale-95 transition-all h-16 shadow-lg">
+          <ion-icon name="receipt-outline" class="text-xl text-purple-400"></ion-icon>
+          <span class="text-sm font-bold text-white/90">Logs</span>
+        </button>
       </div>
+
+      <div class="flex gap-2">
+        <button (click)="openCalibracao()"
+          class="flex-1 h-11 rounded-xl border border-white/10 bg-black/20 flex items-center justify-center gap-2 text-xs font-semibold text-white/70 hover:text-white">
+          <ion-icon name="beaker-outline" class="text-base text-teal-400"></ion-icon>
+          Calibração
+        </button>
+        <button (click)="openProdutos()"
+          class="flex-1 h-11 rounded-xl border border-white/10 bg-black/20 flex items-center justify-center gap-2 text-xs font-semibold text-white/70 hover:text-white">
+          <ion-icon name="cube-outline" class="text-base text-cyan-300"></ion-icon>
+          Produtos
+        </button>
+      </div>
+    </div>
+
+    <!-- Guia: só quando desconectado -->
+    <div *ngIf="!isConnectedToDevice && !isLoading"
+      class="bg-black/40 backdrop-blur-md rounded-2xl p-5 border border-white/10 space-y-3">
+      <div class="flex items-center gap-3">
+        <div class="w-7 h-7 rounded-full bg-neon-cyan/20 flex items-center justify-center text-sm font-bold text-neon-cyan">?</div>
+        <span class="text-base font-bold text-white">Como conectar</span>
+      </div>
+      <ol class="text-sm text-white/75 space-y-2 list-decimal ml-5">
+        <li>Abra o Wi‑Fi do celular e entre na rede <b class="text-white">{{ apSsid }}</b>.</li>
+        <li>Senha: <b class="text-white font-mono">{{ apPassword }}</b></li>
+        <li>Se o celular avisar "sem internet", escolha <b class="text-white">manter conectado</b>.</li>
+        <li>Volte aqui e toque em <ion-icon name="refresh" class="align-middle text-neon-cyan"></ion-icon> para atualizar.</li>
+      </ol>
     </div>
   </div>
+
+  <ion-toast [isOpen]="toastOpen" [message]="toastMessage" duration="2500" (didDismiss)="toastOpen = false"></ion-toast>
 </ion-content>

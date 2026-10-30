@@ -103,24 +103,22 @@ Todas as rotas usam `PreloadAllModules` para pré-carregar após o bootstrap. Na
 
 **Arquivos:** `home/`
 
-**Função:** Tela inicial com status do dispositivo e navegação para as demais funcionalidades.
+**Função:** Resumo do dia, avisos e navegação.
 
-**Estado local:**
-- `deviceStatus: DeviceStatus` — dados do GET /status
-- `isLoading, error` — flags de carregamento
+**Blocos (de cima para baixo):**
+1. **Dispositivo** — Conectado / Conectando… / Desconectado, hora do ESP32 comparada à do celular
+   ("Relógio sincronizado" ou "N min atrasado") e botão de atualizar. Polling de `/status` a cada 15 s.
+2. **Atenção** — só aparece com avisos: regras de nível "aviso" (`dosing-rules.ts`: teste vencido, estoque,
+   relógio, KH↔Ca, dose concentrada) e doses programadas sem registro (`dose-check.ts`). Cada aviso tem
+   ação (Abrir Ajuste, Configurar, Sincronizar relógio) ou "Ok".
+3. **Hoje** (`services/today-summary.ts`) — por bomba, as doses de hoje como feitas (casadas com o log em
+   ±30 min), sem registro ou pendentes; dias de estoque; "N de M doses feitas" e a próxima dose com contagem
+   regressiva (ou a primeira de amanhã).
+4. **Menu** — Configurar e Ajuste de Dosagem (com selo "Hora de medir") em destaque; Analytics e Logs; atalhos
+   menores para Calibração e Produtos. "Configurar" sincroniza a hora (`setTime()`) antes de navegar.
+5. **Como conectar** — só quando desconectado, com rede e senha do AP.
 
-**Fluxo:**
-1. Ao entrar (`ionViewWillEnter`), chama `loadStatus()`
-2. `loadStatus()` → `doserService.getStatus()` com bind de rede
-3. Inicia polling automático a cada **15 segundos** via `setInterval`
-4. Exibe: hora do dispositivo, nome do AP, IP, status Wi-Fi (conectado/RSSI/IP)
-5. 5 botões de navegação: Atualizar, Configurar, Analytics, Logs, Calibração
-6. O botão "Configurar" primeiro sincroniza a hora (`setTime()`) antes de navegar
-
-**Template:**
-- Cards com efeito glassmorphism
-- Status Wi-Fi com indicador pulsante animado
-- Botões com hover scale + brilho
+Com firmware sem `/dosing`, as regras usam um perfil padrão (sem notificações) e o resto da Home funciona.
 
 ### 2. ConfiguracaoPage — Configuração de Bombas
 
@@ -416,6 +414,7 @@ Tema escuro fixo, definido em `theme/variables.scss`:
 | `services/dosing-advisor.spec.ts` | Cálculo do ajuste e repartição em 0,5 ml |
 | `services/dosing-rules.spec.ts` | Regras e sugestões |
 | `services/dose-check.spec.ts` | Conferência de doses no log |
+| `services/today-summary.spec.ts` | Resumo do dia da Home |
 
 **Não há testes** para: `DoserService`, `WifiBindingService`, demais páginas, pipes, diretivas, ou integração HTTP.
 
