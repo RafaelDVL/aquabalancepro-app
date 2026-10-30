@@ -9,6 +9,8 @@ export const routes: Routes = [
     path: 'configuracao',
     loadComponent: () =>
       import('./configuracao/configuracao.page').then((m) => m.ConfiguracaoPage),
+    // Confirma antes de sair com alterações não salvas
+    canDeactivate: [(page: { canLeave?: () => Promise<boolean> }) => page?.canLeave?.() ?? true],
   },
   {
     path: 'calibracao',

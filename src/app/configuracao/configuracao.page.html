@@ -18,7 +18,7 @@
       <div class="flex items-start justify-between gap-4">
         <div>
           <h1 class="text-xl font-bold text-text-main">Agenda das bombas</h1>
-          <p class="text-sm text-text-muted">Edite horarios, dosagem e dias da semana.</p>
+          <p class="text-sm text-text-muted">Toque num horário para editar.</p>
         </div>
         <button type="button"
           class="border border-neon-cyan text-neon-cyan rounded-xl px-4 py-2 text-sm font-semibold transition hover:bg-neon-cyan/10 disabled:opacity-60 disabled:cursor-not-allowed"
@@ -30,150 +30,167 @@
 
     <p class="px-5 text-sm text-red-400" *ngIf="errorMessage">{{ errorMessage }}</p>
 
-    <ion-accordion-group class="px-5 pb-8" *ngIf="bombs.length">
+    <ion-accordion-group class="px-5 pb-4" *ngIf="bombs.length">
       <div *ngFor="let bomb of bombs"
            class="mb-4 bg-black/40 backdrop-blur-md rounded-2xl shadow-lg border border-white/10 overflow-hidden">
 
         <ion-accordion [value]="'bomb-' + bomb.id" class="bg-transparent">
           <div slot="header" class="p-4 w-full cursor-pointer">
             <div class="flex items-center justify-between w-full gap-3">
-              <span class="px-3 py-1.5 rounded-md text-[14px] uppercase font-bold tracking-wider border"
-                [style.borderColor]="bomb.color" [style.color]="bomb.color" [style.backgroundColor]="bomb.colorBg">
-                {{ bomb.name || ('Bomba ' + bomb.id) }}
-              </span>
-
-              <div class="flex items-center gap-2">
-                <span class="px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider border" [ngClass]="
-                  isBombOn(bomb)
-                    ? 'border-green-500 text-green-400 bg-green-500/10'
-                    : 'border-red-500 text-red-400 bg-red-500/10'
-                ">
-                  {{ isBombOn(bomb) ? 'ON' : 'OFF' }}
-                </span>
-                <span
-                  class="px-2 py-1 rounded-md text-[10px] font-bold bg-ocean-light/50 text-text-muted border border-white/5">
-                  {{ activeCount(bomb) }}/3
-                </span>
+              <div class="flex flex-col gap-1.5 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="px-3 py-1 rounded-md text-[13px] uppercase font-bold tracking-wider border"
+                    [style.borderColor]="bomb.color" [style.color]="bomb.color" [style.backgroundColor]="bomb.colorBg">
+                    {{ bomb.name || ('Bomba ' + bomb.id) }}
+                  </span>
+                  <span *ngIf="identities[bomb.id]"
+                    class="px-2 py-0.5 rounded-md text-[10px] uppercase font-bold tracking-wider border border-white/15 text-white/70">
+                    {{ identities[bomb.id] }}
+                  </span>
+                </div>
+                <span class="text-xs" [ngClass]="isBombOn(bomb) ? 'text-text-muted' : 'text-red-300/80'">{{ summary(bomb) }}</span>
               </div>
+
+              <span class="shrink-0 px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider border" [ngClass]="
+                isBombOn(bomb)
+                  ? 'border-green-500/60 text-green-400 bg-green-500/10'
+                  : 'border-red-500/60 text-red-400 bg-red-500/10'
+              ">
+                {{ isBombOn(bomb) ? activeCount(bomb) + (activeCount(bomb) === 1 ? ' horário' : ' horários') : 'Desligada' }}
+              </span>
             </div>
           </div>
 
-          <div slot="content" class="p-6 pt-0 space-y-4 bg-black/20">
-            <div>
-              <label class="text-sm text-text-muted">Nome da bomba</label>
-              <div class="mt-2 flex flex-wrap items-center gap-3">
+          <div slot="content" class="p-5 pt-0 space-y-5 bg-black/20">
+            <!-- Nome e cor -->
+            <div class="flex items-end gap-3">
+              <label class="flex-1 space-y-1">
+                <span class="text-xs text-text-muted">Nome da bomba</span>
                 <div
-                  class="bg-ocean-dark/30 rounded-lg px-3 py-2 border border-ocean-light focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all w-40">
-                  <ion-input [(ngModel)]="bomb.name" placeholder="Nome opcional" maxlength="15"
-                    class="bg-transparent text-text-main placeholder:text-text-muted text-sm"></ion-input>
+                  class="bg-ocean-dark/30 rounded-lg px-3 border border-ocean-light focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all">
+                  <ion-input [(ngModel)]="bomb.name" placeholder="Nome opcional" maxlength="15" style="min-height: 40px"
+                    class="bg-transparent text-text-main text-sm"></ion-input>
                 </div>
-                <div class="relative">
-                  <button type="button" class="h-8 w-8 rounded-md border border-white/10 bg-ocean-dark/70"
-                    [style.backgroundColor]="bomb.color" (click)="toggleColorPicker(bomb.id)"
-                    aria-label="Selecionar cor da bomba"></button>
-                  <div *ngIf="openColorPickerId === bomb.id"
-                    class="absolute z-10 mt-2 p-2 rounded-xl border border-ocean-light bg-ocean-dark shadow-lg flex flex-wrap gap-2">
-                    <button type="button" *ngFor="let color of colorOptions"
-                      class="h-7 w-7 rounded-full border border-white/10 transition ring-2 ring-transparent"
-                      [style.backgroundColor]="color" [ngClass]="{ 'ring-white/70': bomb.color === color }"
-                      (click)="selectBombColor(bomb, color)" aria-label="Selecionar cor da bomba"></button>
-                  </div>
+              </label>
+              <div class="relative space-y-1">
+                <span class="text-xs text-text-muted block">Cor</span>
+                <button type="button" (click)="toggleColorPicker(bomb.id)" aria-label="Selecionar cor da bomba"
+                  class="h-[42px] px-3 rounded-lg border border-ocean-light bg-ocean-dark/30 flex items-center gap-2">
+                  <span class="h-5 w-5 rounded-full border border-white/20" [style.backgroundColor]="bomb.color"></span>
+                  <ion-icon name="color-palette-outline" class="text-text-muted"></ion-icon>
+                </button>
+                <div *ngIf="openColorPickerId === bomb.id"
+                  class="absolute right-0 z-10 mt-2 w-48 p-2 rounded-xl border border-ocean-light bg-ocean-dark shadow-lg flex flex-wrap gap-2">
+                  <button type="button" *ngFor="let color of colorOptions"
+                    class="h-7 w-7 rounded-full border border-white/10 transition ring-2 ring-transparent"
+                    [style.backgroundColor]="color" [ngClass]="{ 'ring-white/70': bomb.color === color }"
+                    (click)="selectBombColor(bomb, color)" aria-label="Selecionar cor"></button>
                 </div>
               </div>
             </div>
 
-            <ion-segment class="mt-4 bg-ocean-dark/40 border border-ocean-light rounded-xl p-1"
-              style="--background: transparent; --indicator-color: transparent;" [(ngModel)]="bomb.activeScheduleIndex">
-              <ion-segment-button *ngFor="let schedule of bomb.schedules; let i = index" [value]="i" class="text-xs"
-                style="--color: #6DA5C0; --color-checked: #05161A; --background-checked: #0F969C; --indicator-color: transparent;">
-                Horario {{ i + 1 }}
-              </ion-segment-button>
-            </ion-segment>
+            <!-- Estoque -->
+            <div class="space-y-1">
+              <span class="text-xs text-text-muted">Estoque do produto</span>
+              <div class="flex items-center gap-3">
+                <div
+                  class="flex items-center flex-1 bg-ocean-dark/30 rounded-lg px-3 border border-ocean-light focus-within:border-neon-cyan transition-all">
+                  <input type="number" min="0" step="10" [(ngModel)]="bomb.quantidadeEstoque" (blur)="normalizeStock(bomb)"
+                    class="flex-1 h-10 bg-transparent text-text-main font-semibold outline-none" />
+                  <span class="text-sm text-text-muted">ml</span>
+                </div>
+                <button type="button" (click)="refill(bomb)"
+                  class="h-10 px-4 rounded-lg border border-neon-cyan text-neon-cyan text-sm font-semibold hover:bg-neon-cyan/10">
+                  Reabasteci
+                </button>
+              </div>
+              <p class="text-[11px]" [ngClass]="(stockDays(bomb) ?? 99) < 7 ? 'text-amber-300' : 'text-text-muted'">
+                <ng-container *ngIf="stockDays(bomb) !== null; else noStock">Dura ~{{ stockDays(bomb) }} dias na dose atual.</ng-container>
+                <ng-template #noStock>{{ bomb.quantidadeEstoque > 0 ? 'Sem dose ativa.' : 'Informe o volume para acompanhar o estoque.' }}</ng-template>
+              </p>
+            </div>
 
-            <div class="schedule-slider mt-4">
-              <div class="schedule-track" [style.transform]="'translateX(' + (-bomb.activeScheduleIndex * 100) + '%)'">
-                <div *ngFor="let schedule of bomb.schedules" class="schedule-panel space-y-4">
-                  <div class="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/5">
-                    <div class="flex flex-col">
-                      <span class="text-sm font-bold text-text-main">Agendamento</span>
-                      <span class="text-xs text-text-muted">Ativa ou desativa o horario acima.</span>
+            <!-- Horários -->
+            <div class="space-y-2">
+              <div class="flex items-baseline justify-between">
+                <span class="text-xs text-text-muted">Horários</span>
+                <span class="text-xs text-text-main font-semibold">Média {{ formatMl(dailyDoseOf(bomb)) }} ml/dia</span>
+              </div>
+
+              <div *ngFor="let schedule of bomb.schedules; let i = index"
+                class="rounded-xl border overflow-hidden transition-colors"
+                [ngClass]="bomb.editingIndex === i ? 'border-neon-cyan/60 bg-white/5' : 'border-white/10 bg-white/[0.03]'">
+                <div class="flex items-center gap-3 px-3 py-2.5 cursor-pointer" (click)="toggleEditing(bomb, i)">
+                  <span class="h-2.5 w-2.5 rounded-full shrink-0"
+                    [ngClass]="schedule.status ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.7)]' : 'bg-white/20'"></span>
+                  <div class="flex-1 min-w-0" [ngClass]="schedule.status ? 'text-text-main' : 'text-white/40'">
+                    <div class="flex items-baseline gap-3">
+                      <span class="text-base font-bold tabular-nums">{{ schedule.timeValue }}</span>
+                      <span class="text-sm font-semibold">{{ formatMl(schedule.dosagem) }} ml</span>
                     </div>
+                    <span class="text-[11px]" [ngClass]="schedule.status ? 'text-text-muted' : 'text-white/30'">
+                      {{ schedule.status ? daysLabel(schedule) : 'Desativado' }}
+                    </span>
+                  </div>
+                  <ion-toggle [checked]="schedule.status" (click)="$event.stopPropagation()"
+                    (ionChange)="setScheduleStatus(schedule, $event.detail.checked)"
+                    [attr.aria-label]="'Ativar horário ' + (i + 1)"></ion-toggle>
+                  <ion-icon [name]="bomb.editingIndex === i ? 'chevron-up' : 'chevron-down'" class="text-text-muted"></ion-icon>
+                </div>
 
+                <!-- Editor do horário -->
+                <div *ngIf="bomb.editingIndex === i" class="px-3 pb-4 pt-1 space-y-4 border-t border-white/5">
+                  <label class="block space-y-1">
+                    <span class="text-xs text-text-muted">Horário</span>
+                    <div
+                      class="bg-ocean-dark/30 rounded-lg px-3 border border-ocean-light focus-within:border-neon-cyan transition-all">
+                      <ion-input type="time" [(ngModel)]="schedule.timeValue" class="bg-transparent text-text-main"></ion-input>
+                    </div>
+                  </label>
+
+                  <div class="space-y-2">
+                    <span class="text-xs text-text-muted">Dose (ml)</span>
                     <div class="flex items-center gap-3">
-                      <span class="text-sm font-semibold"
-                        [ngClass]="schedule.status ? 'text-green-400' : 'text-red-400'">
-                        {{ schedule.status ? 'Ativado' : 'Desativado' }}
-                      </span>
-                      <ion-toggle
-                        [checked]="schedule.status"
-                        (ionChange)="setScheduleStatus(schedule, $event.detail.checked)"
-                        enableOnOff="true"
-                        [style.--track-background]="schedule.status ? '' : 'rgba(239,68,68,0.3)'"
-                        [style.--track-border-color]="schedule.status ? '' : '#ef4444'"
-                        [style.--handle-background]="schedule.status ? '' : '#ef4444'"
-                        [style.--track-background-checked]="'rgba(34,197,94,0.3)'"
-                        [style.--track-border-color-checked]="'#22c55e'"
-                        [style.--handle-background-checked]="'#22c55e'"
-                      ></ion-toggle>
+                      <button type="button" (click)="adjustDose(schedule, -doseStep)" aria-label="Diminuir dose"
+                        class="h-11 w-11 rounded-lg border border-ocean-light text-text-main text-xl font-bold hover:border-neon-cyan hover:text-neon-cyan transition">
+                        −
+                      </button>
+                      <input type="number" inputmode="decimal" min="0.5" max="15" step="0.5"
+                        [(ngModel)]="schedule.dosagem" (blur)="normalizeScheduleDose(schedule)"
+                        class="flex-1 h-11 rounded-lg bg-ocean-dark/30 border border-ocean-light text-center text-2xl font-semibold text-text-main outline-none focus:border-neon-cyan" />
+                      <button type="button" (click)="adjustDose(schedule, doseStep)" aria-label="Aumentar dose"
+                        class="h-11 w-11 rounded-lg border border-ocean-light text-text-main text-xl font-bold hover:border-neon-cyan hover:text-neon-cyan transition">
+                        +
+                      </button>
+                    </div>
+                    <div class="grid grid-cols-6 gap-2">
+                      <button type="button" *ngFor="let preset of dosagePresets" (click)="setDosePreset(schedule, preset)"
+                        class="py-2 rounded-lg text-sm font-bold border transition-all active:scale-95"
+                        [ngClass]="schedule.dosagem === preset ? 'text-black' : 'border-ocean-light text-text-muted hover:border-neon-cyan hover:text-neon-cyan'"
+                        [style.backgroundColor]="schedule.dosagem === preset ? bomb.color : 'transparent'"
+                        [style.borderColor]="schedule.dosagem === preset ? bomb.color : ''">
+                        {{ preset.toLocaleString('pt-BR') }}
+                      </button>
                     </div>
                   </div>
 
-                  <div>
-                    <label class="text-sm text-text-muted">Horario de acionamento</label>
-                    <div
-                      class="mt-2 bg-ocean-dark/30 rounded-lg px-4 py-2 border border-ocean-light focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all">
-                      <ion-input type="time" [(ngModel)]="schedule.timeValue"
-                        class="bg-transparent text-text-main"></ion-input>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label class="text-sm text-text-muted">Dosagem (ml)</label>
-                    <div
-                      class="mt-2 bg-ocean-dark/30 rounded-xl px-4 py-3 border border-ocean-light focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all">
-                      <div class="flex items-center gap-3">
-                        <button type="button"
-                          class="h-11 w-11 rounded-lg border border-ocean-light text-text-muted text-lg font-bold hover:border-neon-cyan hover:text-neon-cyan transition"
-                          (click)="adjustDose(schedule, -doseStep)">
-                          -
-                        </button>
-                        <ion-input type="number" inputmode="decimal" min="0.5" max="15" step="0.5"
-                          [(ngModel)]="schedule.dosagem" (ionBlur)="normalizeScheduleDose(schedule)"
-                          class="bg-transparent text-text-main text-2xl font-semibold text-center"></ion-input>
-                        <button type="button"
-                          class="h-11 w-11 rounded-lg border border-ocean-light text-text-muted text-lg font-bold hover:border-neon-cyan hover:text-neon-cyan transition"
-                          (click)="adjustDose(schedule, doseStep)">
-                          +
-                        </button>
-                      </div>
-                      <div class="grid grid-cols-6 gap-2 mt-4">
-                        <button type="button" *ngFor="let preset of dosagePresets"
-                          (click)="setDosePreset(schedule, preset)"
-                          class="py-3 rounded-lg text-sm font-bold border border-ocean-light transition-all active:scale-95"
-                          [ngClass]="schedule.dosagem === preset ? 'text-black shadow-lg scale-105' : 'text-text-muted hover:border-neon-cyan hover:text-neon-cyan'"
-                          [style.backgroundColor]="schedule.dosagem === preset ? bomb.color : 'transparent'"
-                          [style.borderColor]="schedule.dosagem === preset ? bomb.color : ''">
-                          {{ preset }}
+                  <div class="space-y-2">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="text-xs text-text-muted">Dias</span>
+                      <div class="flex gap-1.5">
+                        <button type="button" *ngFor="let preset of dayPresets" (click)="setDays(schedule, preset.value)"
+                          class="px-2.5 py-1 rounded-md text-[11px] font-semibold border transition"
+                          [ngClass]="isPreset(schedule, preset.value) ? 'border-neon-cyan text-neon-cyan bg-neon-cyan/10' : 'border-white/10 text-text-muted hover:border-white/30'">
+                          {{ preset.label }}
                         </button>
                       </div>
                     </div>
-                  </div>
-
-                  <div class="mt-5">
-                    <label class="text-sm text-text-muted mb-2 block pl-1">Dias de funcionamento</label>
-
-                    <div class="grid grid-cols-7 gap-2">
-                      <button
-                        type="button"
-                        *ngFor="let day of days; let i = index"
-                        (click)="toggleDay(schedule, i)"
-                        class="day-toggle"
-                        [ngClass]="schedule.diasSemana[i] ? 'is-active' : 'is-inactive'"
-                        [attr.aria-pressed]="schedule.diasSemana[i]"
-                        [attr.aria-label]="day + (schedule.diasSemana[i] ? ' ativado' : ' desativado')"
-                      >
-                        <span class="day-label">{{ day }}</span>
-                        <span class="state-dot" aria-hidden="true"></span>
+                    <div class="grid grid-cols-7 gap-1.5">
+                      <button type="button" *ngFor="let day of days; let d = index" (click)="toggleDay(schedule, d)"
+                        class="day-toggle" [ngClass]="schedule.diasSemana[d] ? 'is-active' : 'is-inactive'"
+                        [attr.aria-pressed]="schedule.diasSemana[d]"
+                        [attr.aria-label]="day + (schedule.diasSemana[d] ? ' ativado' : ' desativado')">
+                        {{ day }}
                       </button>
                     </div>
                   </div>
@@ -185,25 +202,32 @@
       </div>
     </ion-accordion-group>
 
-    <div class="px-5 pb-12">
+    <div class="px-5" [ngClass]="isDirty ? 'pb-28' : 'pb-12'">
       <div *ngIf="ruleWarnings.length" class="mb-4 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-4 space-y-2">
         <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-200">Sugestões para esta agenda</p>
         <p *ngFor="let warning of ruleWarnings" class="text-sm text-amber-50">{{ warning.mensagem }}</p>
         <p class="text-[11px] text-amber-100/60">As correções automáticas ficam na tela Ajuste de Dosagem.</p>
       </div>
 
-      <div class="grid grid-cols-2 gap-4">
-
-        <button type="button"
-          class="flex flex-col items-center justify-center h-28 gap-2 border border-white/20 text-neon-cyan font-bold rounded-2xl active:scale-95 transition-all bg-white/5 backdrop-blur-md shadow-lg disabled:opacity-50 hover:bg-white/10"
-          (click)="saveConfig()" [disabled]="saving || !bombs.length">
-          <ion-icon name="cloud-upload-outline" class="text-3xl mb-1"></ion-icon>
-          <span class="text-xs uppercase tracking-wider">Salvar</span>
-        </button>
-
-      </div>
+      <p *ngIf="!isDirty && bombs.length" class="text-center text-xs text-text-muted">Tudo salvo no ESP32.</p>
     </div>
 
     <ion-toast [isOpen]="toastOpen" [message]="toastMessage" duration="2000" (didDismiss)="toastOpen = false"></ion-toast>
+  </div>
+
+  <!-- Barra de salvar: aparece só com alterações pendentes -->
+  <div slot="fixed" *ngIf="isDirty" class="bottom-0 left-0 right-0 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+    <div class="flex items-center gap-3 rounded-2xl border border-neon-cyan/40 bg-ocean-dark/95 backdrop-blur-md px-4 py-3 shadow-[0_-8px_30px_rgba(0,0,0,0.5)]">
+      <span class="flex-1 text-sm text-text-main">Alterações não salvas</span>
+      <button type="button" (click)="loadConfig()" [disabled]="saving"
+        class="px-3 py-2 rounded-lg text-sm font-semibold text-text-muted hover:text-text-main">
+        Descartar
+      </button>
+      <button type="button" (click)="saveConfig()" [disabled]="saving"
+        class="px-4 py-2 rounded-lg bg-neon-cyan text-ocean-dark text-sm font-bold flex items-center gap-2 disabled:opacity-60">
+        <ion-icon name="cloud-upload-outline"></ion-icon>
+        {{ saving ? 'Salvando...' : 'Salvar' }}
+      </button>
+    </div>
   </div>
 </ion-content>

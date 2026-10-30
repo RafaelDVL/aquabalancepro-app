@@ -129,14 +129,14 @@ Todas as rotas usam `PreloadAllModules` para pré-carregar após o bootstrap. Na
 **Função:** Configurar até 5 bombas, cada uma com 3 horários de dosagem.
 
 **Estado local:**
-- `bombs: BombForm[]` — 5 bombas com schedules, cores, schedule ativo
-- `expandedBombIndex: number` — accordion atual
-- `isLoading, error` — flags
+- `bombs: BombForm[]` — bombas com schedules e cores
+- `identities` — tipo do produto por bomba (de `GET /dosing`; vazio com firmware antigo)
+- `savedSnapshot` / `isDirty` — detecta alterações não salvas
 
 **Modelo interno `BombForm`:**
 ```typescript
 interface BombForm extends BombConfig {
-  activeScheduleIndex: number;  // Schedule selecionado no segment slider
+  editingIndex: number | null;  // Horário aberto para edição
   color: string;                // Cor hex personalizada
   colorBg: string;              // Cor com alpha para background
   schedules: (ScheduleConfig & { timeValue: string })[];
@@ -144,20 +144,15 @@ interface BombForm extends BombConfig {
 ```
 
 **Fluxo:**
-1. Ao entrar, carrega configuração via `doserService.getConfig()`
-2. Aplica cores salvas do `localStorage` ou usa as padrão
-3. Usuário edita: nome, cor, dosagem (step 0.5ml, range 0.5–15ml), horário, dias da semana
-4. Accordions: uma bomba expandida por vez
-5. Segment slider para alternar entre os 3 schedules de cada bomba
-6. Ao salvar (`saveConfig()`), envia array de `BombConfig` como JSON para `POST /config`
-7. Cores são persistidas no `localStorage`
-
-**Template:**
-- Accordions com transição suave (max-height animado)
-- Segment para navegação entre schedules
-- Day-toggle com gradiente (ativo/inativo) para cada dia da semana
-- Inputs de time nativos (`<input type="time">`)
-- Botão de slide para valor de dosagem
+1. Ao entrar, carrega a configuração (`getConfig()`) e, se houver, o tipo de cada bomba (`getDosingData()`)
+2. Card fechado: nome, tipo, dose média/dia, próxima dose e quantidade de horários ativos
+3. Card aberto: nome + cor, **estoque** (ml, com botão "Reabasteci" que lembra o tamanho do frasco) e a lista
+   dos 3 horários (hora, dose, dias, toggle). Toque numa linha abre o editor: horário, dose (passo 0,5 ml,
+   0,5–15 ml, atalhos) e dias com atalhos Todos / Seg–Sex / Fim de semana
+4. Com alterações pendentes aparece uma barra fixa "Alterações não salvas" (Descartar / Salvar); sair da tela
+   nesse estado pede confirmação (guard `canDeactivate` em `app.routes.ts`)
+5. Salvar envia `POST /config` (inclui `quantidadeEstoque`), mostra sugestões das regras e reagenda notificações
+6. Cores e tamanho do último frasco ficam no `localStorage`
 
 ### 3. CalibracaoPage — Calibração
 

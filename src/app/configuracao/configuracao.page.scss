@@ -13,23 +13,9 @@
     background: transparent !important;
   }
 
-  .schedule-slider {
-    overflow: hidden;
-  }
-
-  .schedule-track {
-    display: flex;
-    transition: transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
-    will-change: transform;
-  }
-
-  .schedule-panel {
-    min-width: 100%;
-  }
-
   .day-toggle {
     position: relative;
-    aspect-ratio: 1 / 1;
+    height: 2.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -53,21 +39,6 @@
     box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25), 0 0 0 4px rgba(239, 68, 68, 0.45);
   }
 
-  .day-toggle .day-label {
-    line-height: 1;
-  }
-
-  .day-toggle .state-dot {
-    position: absolute;
-    right: 0.34rem;
-    bottom: 0.34rem;
-    width: 0.42rem;
-    height: 0.42rem;
-    border-radius: 9999px;
-    background: #ef4444;
-    box-shadow: 0 0 0 1px rgba(127, 29, 29, 0.7), 0 0 8px rgba(239, 68, 68, 0.45);
-  }
-
   .day-toggle.is-active {
     border-color: rgba(34, 197, 94, 0.85);
     background: linear-gradient(145deg, rgba(8, 145, 178, 0.9), rgba(16, 185, 129, 0.85));
@@ -78,11 +49,6 @@
 
   .day-toggle.is-active:focus-visible {
     box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25), 0 0 0 4px rgba(34, 197, 94, 0.45);
-  }
-
-  .day-toggle.is-active .state-dot {
-    background: #22c55e;
-    box-shadow: 0 0 0 1px rgba(6, 78, 59, 0.7), 0 0 10px rgba(34, 197, 94, 0.75);
   }
 
   .day-toggle.is-inactive:hover {

@@ -3,8 +3,9 @@ import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { addIcons } from 'ionicons';
-import { power, cloudUploadOutline } from 'ionicons/icons';
+import { power, cloudUploadOutline, colorPaletteOutline, chevronDown, chevronUp } from 'ionicons/icons';
 import {
+  AlertController,
   IonAccordion,
   IonAccordionGroup,
   IonBackButton,
@@ -14,15 +15,15 @@ import {
   IonInput,
   IonIcon,
   IonToggle,
-  IonSegment,
-  IonSegmentButton,
   IonTitle,
   IonToast,
   IonToolbar } from '@ionic/angular/standalone';
 import { firstValueFrom } from 'rxjs';
 import { BombConfig, DoserService, ScheduleConfig } from '../services/doser.service';
 import { DoseNotificationsService } from '../services/dose-notifications.service';
+import { dailyDose } from '../services/dosing-advisor';
 import { Suggestion, evaluateRules } from '../services/dosing-rules';
+import { IDENTITIES } from '../services/dosing.models';
 
 const SCHEDULE_RULES = ['espaco-', 'dose-concentrada-', 'teto-diario-', 'kh-noite-', 'estoque-'];
 
@@ -32,13 +33,16 @@ interface ScheduleForm extends ScheduleConfig {
 }
 
 interface BombForm extends BombConfig {
-  activeScheduleIndex: number;
+  editingIndex: number | null;
   schedules: ScheduleForm[];
   color: string;
   colorBg: string;
 }
 
+type DayPreset = 'todos' | 'semana' | 'fimDeSemana';
+
 const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
+const WEEKDAYS = [false, true, true, true, true, true, false];
 
 @Component({
   selector: 'app-configuracao',
@@ -56,8 +60,6 @@ const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
     IonInput,
     IonIcon,
     IonToggle,
-    IonSegment,
-    IonSegmentButton,
     IonTitle,
     IonToast,
     IonToolbar,
@@ -73,11 +75,19 @@ export class ConfiguracaoPage {
   toastOpen = false;
   openColorPickerId: number | null = null;
   ruleWarnings: Suggestion[] = [];
+  identities: Record<number, string> = {};
   readonly doseMin = 0.5;
   readonly doseMax = 15;
   readonly doseStep = 0.5;
   readonly dosagePresets = [0.5, 1, 3, 5, 10, 15];
+  readonly dayPresets: { value: DayPreset; label: string }[] = [
+    { value: 'todos', label: 'Todos' },
+    { value: 'semana', label: 'Seg–Sex' },
+    { value: 'fimDeSemana', label: 'Fim de semana' },
+  ];
+  private savedSnapshot = '';
   private readonly colorStorageKey = 'abp-bomb-colors';
+  private readonly refillStorageKey = 'abp-refill-ml';
   private readonly defaultColors: Record<number, string> = {
     1: '#2DD4BF',
     2: '#F472B6',
@@ -104,8 +114,9 @@ export class ConfiguracaoPage {
     private readonly doser: DoserService,
     private readonly router: Router,
     private readonly notifications: DoseNotificationsService,
+    private readonly alerts: AlertController,
   ) {
-    addIcons({ power, cloudUploadOutline });
+    addIcons({ power, cloudUploadOutline, colorPaletteOutline, chevronDown, chevronUp });
   }
 
   async ionViewWillEnter(): Promise<void> {
@@ -119,21 +130,57 @@ export class ConfiguracaoPage {
       const bombs = await firstValueFrom(this.doser.getConfig());
       const storedColors = this.getStoredColors();
       this.bombs = bombs.map((bomb) => this.toFormBomb(bomb, storedColors));
+      void this.loadIdentities(bombs);
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : 'Falha ao carregar configuracoes.';
       const storedColors = this.getStoredColors();
       this.bombs = this.createFallbackBombs(storedColors);
     } finally {
+      this.savedSnapshot = this.snapshot();
       this.loading = false;
     }
+  }
+
+  get isDirty(): boolean {
+    return !this.loading && this.snapshot() !== this.savedSnapshot;
+  }
+
+  /** Chamado pelo guard da rota antes de sair da tela. */
+  async canLeave(): Promise<boolean> {
+    if (!this.isDirty) return true;
+    const alert = await this.alerts.create({
+      header: 'Sair sem salvar?',
+      message: 'As alterações nesta tela serão perdidas.',
+      buttons: [
+        { text: 'Continuar editando', role: 'cancel' },
+        { text: 'Sair', role: 'confirm' },
+      ],
+    });
+    await alert.present();
+    const { role } = await alert.onDidDismiss();
+    if (role === 'confirm') {
+      this.savedSnapshot = this.snapshot();
+      return true;
+    }
+    return false;
   }
 
   toggleDay(schedule: ScheduleForm, index: number): void {
     schedule.diasSemana[index] = !schedule.diasSemana[index];
   }
 
+  setDays(schedule: ScheduleForm, preset: DayPreset): void {
+    schedule.diasSemana = DAYS.map((_, day) =>
+      preset === 'todos' ? true : preset === 'semana' ? WEEKDAYS[day] : !WEEKDAYS[day],
+    );
+  }
+
   setScheduleStatus(schedule: ScheduleForm, checked: boolean): void {
     schedule.status = Boolean(checked);
+  }
+
+  toggleEditing(bomb: BombForm, index: number): void {
+    bomb.editingIndex = bomb.editingIndex === index ? null : index;
   }
 
   activeCount(bomb: BombForm): number {
@@ -142,6 +189,71 @@ export class ConfiguracaoPage {
 
   isBombOn(bomb: BombForm): boolean {
     return this.activeCount(bomb) > 0;
+  }
+
+  dailyDoseOf(bomb: BombForm): number {
+    return dailyDose(this.toConfigPayload(bomb));
+  }
+
+  summary(bomb: BombForm): string {
+    if (!this.isBombOn(bomb)) return 'Sem horários ativos';
+    const next = this.nextDose(bomb);
+    return `${this.formatMl(this.dailyDoseOf(bomb))} ml/dia${next ? ` · próxima ${next}` : ''}`;
+  }
+
+  /** Volume em pt-BR com 1 a 2 casas (ex.: 2,0 · 0,43). */
+  formatMl(value: number): string {
+    return Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+  }
+
+  daysLabel(schedule: ScheduleForm): string {
+    const active = schedule.diasSemana.map((on, day) => (on ? day : -1)).filter((day) => day >= 0);
+    if (active.length === 7) return 'Todos os dias';
+    if (!active.length) return 'Nenhum dia';
+    if (schedule.diasSemana.every((on, day) => on === WEEKDAYS[day])) return 'Seg–Sex';
+    if (schedule.diasSemana.every((on, day) => on === !WEEKDAYS[day])) return 'Fim de semana';
+    return active.map((day) => DAYS[day]).join(', ');
+  }
+
+  isPreset(schedule: ScheduleForm, preset: DayPreset): boolean {
+    return schedule.diasSemana.every((on, day) =>
+      preset === 'todos' ? on : preset === 'semana' ? on === WEEKDAYS[day] : on === !WEEKDAYS[day],
+    );
+  }
+
+  stockDays(bomb: BombForm): number | null {
+    const perDay = this.dailyDoseOf(bomb);
+    if (perDay <= 0 || bomb.quantidadeEstoque <= 0) return null;
+    return Math.floor(bomb.quantidadeEstoque / perDay);
+  }
+
+  normalizeStock(bomb: BombForm): void {
+    const value = Number(bomb.quantidadeEstoque);
+    bomb.quantidadeEstoque = Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+  }
+
+  async refill(bomb: BombForm): Promise<void> {
+    const sizes = this.getRefillSizes();
+    const alert = await this.alerts.create({
+      header: 'Reabasteci',
+      message: `Volume do frasco novo de ${bomb.name || `Bomba ${bomb.id}`} (ml).`,
+      inputs: [{ name: 'ml', type: 'number', min: 1, value: sizes[String(bomb.id)] ?? 1000 }],
+      buttons: [
+        { text: 'Cancelar', role: 'cancel' },
+        { text: 'Definir estoque', role: 'confirm' },
+      ],
+    });
+    await alert.present();
+    const { role, data } = await alert.onDidDismiss();
+    const ml = Math.round(Number(data?.values?.ml));
+    if (role !== 'confirm' || !Number.isFinite(ml) || ml <= 0) return;
+
+    bomb.quantidadeEstoque = ml;
+    try {
+      localStorage.setItem(this.refillStorageKey, JSON.stringify({ ...sizes, [String(bomb.id)]: ml }));
+    } catch {
+      // Ignora falhas de storage
+    }
   }
 
   selectBombColor(bomb: BombForm, color: string): void {
@@ -183,6 +295,7 @@ export class ConfiguracaoPage {
     try {
       const payload = this.bombs.map((bomb) => this.toConfigPayload(bomb));
       await firstValueFrom(this.doser.saveConfig(payload));
+      this.savedSnapshot = this.snapshot();
       this.toastMessage = 'Configuracoes salvas com sucesso.';
       this.toastOpen = true;
       void this.checkRules(payload);
@@ -190,6 +303,43 @@ export class ConfiguracaoPage {
       this.errorMessage = error instanceof Error ? error.message : 'Falha ao salvar configuracoes.';
     } finally {
       this.saving = false;
+    }
+  }
+
+  private nextDose(bomb: BombForm): string | null {
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    for (let offset = 0; offset < 8; offset++) {
+      const day = (now.getDay() + offset) % 7;
+      const times = bomb.schedules
+        .filter((schedule) => schedule.status && schedule.diasSemana[day])
+        .map((schedule) => schedule.timeValue || '00:00')
+        .filter((time) => {
+          const [hour, minute] = time.split(':').map(Number);
+          return offset > 0 || hour * 60 + minute > nowMinutes;
+        })
+        .sort();
+      if (times.length) {
+        return offset === 0 ? times[0] : offset === 1 ? `amanhã ${times[0]}` : `${DAYS[day]} ${times[0]}`;
+      }
+    }
+    return null;
+  }
+
+  private snapshot(): string {
+    return JSON.stringify(this.bombs.map((bomb) => this.toConfigPayload(bomb)));
+  }
+
+  // Tipo de produto (KH, Cálcio…) cadastrado em Produtos; firmware antigo sem /dosing apenas não mostra
+  private async loadIdentities(bombs: BombConfig[]): Promise<void> {
+    try {
+      const data = await firstValueFrom(this.doser.getDosingData(bombs.map((bomb) => bomb.id)));
+      this.identities = data.pumps.reduce<Record<number, string>>((acc, pump) => {
+        if (pump.identidade !== 'Nenhuma') acc[pump.pumpId] = IDENTITIES[pump.identidade].label;
+        return acc;
+      }, {});
+    } catch {
+      this.identities = {};
     }
   }
 
@@ -222,7 +372,7 @@ export class ConfiguracaoPage {
   }
 
   private toConfigPayload(bomb: BombForm): BombConfig {
-    const { activeScheduleIndex, color, colorBg, ...rest } = bomb;
+    const { editingIndex, color, colorBg, ...rest } = bomb;
     const schedules = bomb.schedules.map((schedule) => {
       const [hour, minute] = schedule.timeValue.split(':').map((value) => Number(value));
       const { timeValue, ...scheduleRest } = schedule;
@@ -239,6 +389,7 @@ export class ConfiguracaoPage {
     return {
       ...rest,
       name: bomb.name?.trim() || `Bomba ${bomb.id}`,
+      quantidadeEstoque: Number(bomb.quantidadeEstoque) || 0,
       schedules,
     };
   }
@@ -253,7 +404,7 @@ export class ConfiguracaoPage {
     const color = storedColors[String(bomb.id)] ?? this.defaultColors[bomb.id] ?? '#0F969C';
     return {
       ...bomb,
-      activeScheduleIndex: 0,
+      editingIndex: null,
       color,
       colorBg: this.colorWithAlpha(color, 0.12),
       schedules: bomb.schedules.map((schedule) => ({
@@ -318,6 +469,15 @@ export class ConfiguracaoPage {
       const parsed = JSON.parse(raw) as Record<string, string>;
       if (!parsed || typeof parsed !== 'object') return {};
       return parsed;
+    } catch {
+      return {};
+    }
+  }
+
+  private getRefillSizes(): Record<string, number> {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(this.refillStorageKey) ?? '{}');
+      return parsed && typeof parsed === 'object' ? parsed : {};
     } catch {
       return {};
     }

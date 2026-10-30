@@ -10,6 +10,8 @@
  */
 
 @use "tailwindcss";
+/* Carrega as cores do tema (neon-cyan, ocean-*, text-*) definidas no tailwind.config.js */
+@config "../tailwind.config.js";
 
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
@@ -31,6 +33,25 @@
 
 body {
   color: var(--abp-ink);
+}
+
+/* O normalize do Ionic zera padding/borda/raio de todo <button> fora de camada, anulando as classes do
+   Tailwind; revert-layer devolve o controle às camadas (preflight + utilitários). */
+button {
+  padding: revert-layer;
+  border: revert-layer;
+  border-radius: revert-layer;
+}
+
+/* Esconde as setas nativas dos campos numéricos (as telas têm botões − e +) */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type='number'] {
+  -moz-appearance: textfield;
 }
 
 /* Efeito de brilho na borda superior (opcional, mas fica lindo) */
