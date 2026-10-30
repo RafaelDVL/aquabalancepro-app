@@ -47,6 +47,41 @@ ion-accordion-group {
   background: transparent !important;
 }
 
+/* Botão contornado das telas de Produtos e Ajuste (fora de @layer para vencer o reset de botão do Ionic) */
+.btn-outline {
+  border: 1.5px solid #22d3ee;
+  color: #22d3ee;
+}
+
+/* Alertas de confirmação com quebras de linha no texto */
+.alert-pre .alert-message {
+  white-space: pre-line;
+}
+
+/* Campo de formulário das telas de Produtos e Ajuste de Dosagem (camada components: utilitários como w-20 vencem) */
+@layer components {
+  .field {
+    width: 100%;
+    height: 2.5rem;
+    padding: 0 0.75rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    color: #e0e0e0;
+    font-weight: 600;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .field:focus {
+    border-color: #22d3ee;
+  }
+
+  .field option {
+    background: #05161a;
+  }
+}
+
 /**
  * Ionic Dark Mode
  * -----------------------------------------------------

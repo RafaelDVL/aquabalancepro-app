@@ -1,7 +1,8 @@
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable, catchError, from, map, of, switchMap } from 'rxjs';
+import { Observable, catchError, from, map, of, switchMap, throwError } from 'rxjs';
 import { WifiBindingService } from './wifi-binding.service';
+import { DosingData, normalizeDosingData } from './dosing.models';
 
 export interface ScheduleConfig {
   id: number;
@@ -73,7 +74,8 @@ type RawConfig = Record<string, RawBomb>;
 export class DoserService {
   private readonly apiUrl = 'http://192.168.4.1';
   private readonly scheduleCount = 3;
-  private readonly bombCount = 4;
+  // Fallback: a contagem real vem das chaves bombN retornadas pelo firmware
+  private readonly bombCount = 5;
   private readonly plainJsonHeaders = new HttpHeaders({
     'Content-Type': 'text/plain',
   });
@@ -159,6 +161,31 @@ export class DoserService {
     );
   }
 
+  getDosingData(pumpIds: number[]): Observable<DosingData> {
+    return this.withWifiBinding(
+      this.http.get<unknown>(`${this.apiUrl}/dosing`).pipe(
+        map((raw) => normalizeDosingData(raw, pumpIds)),
+        catchError((error: HttpErrorResponse) =>
+          throwError(() =>
+            error.status === 404
+              ? new Error('O firmware do ESP32 ainda não tem o Ajuste de Dosagem. Grave o firmware novo.')
+              : error,
+          ),
+        ),
+      ),
+    );
+  }
+
+  saveDosingData(data: DosingData): Observable<ApiStatusResponse> {
+    return this.withWifiBinding(
+      this.http.post<ApiStatusResponse>(
+        `${this.apiUrl}/dosing`,
+        JSON.stringify(data),
+        { headers: this.plainJsonHeaders },
+      ),
+    );
+  }
+
   private withWifiBinding<T>(request: Observable<T>): Observable<T> {
     return from(this.wifiBinding.bindToWifi()).pipe(
       catchError(() => of(null)),
@@ -167,7 +194,7 @@ export class DoserService {
   }
 
   private mapBombs(raw: RawConfig): BombConfig[] {
-    return Array.from({ length: this.bombCount }, (_, i) => i + 1).map((id) => {
+    return Array.from({ length: this.resolveBombCount(raw) }, (_, i) => i + 1).map((id) => {
       const key = `bomb${id}`;
       const bomb = raw?.[key] ?? {};
       const legacySchedule: RawSchedule = {
@@ -190,6 +217,14 @@ export class DoserService {
         schedules,
       };
     });
+  }
+
+  private resolveBombCount(raw: RawConfig): number {
+    const ids = Object.keys(raw ?? {})
+      .map((key) => /^bomb(\d+)$/.exec(key)?.[1])
+      .map(Number)
+      .filter((id) => Number.isInteger(id) && id > 0);
+    return ids.length ? Math.max(...ids) : this.bombCount;
   }
 
   private toSchedule(raw: RawSchedule | undefined, index: number): ScheduleConfig {

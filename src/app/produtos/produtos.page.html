@@ -1,0 +1,154 @@
+<ion-header>
+  <ion-toolbar class="bg-transparent text-cyan-400" style="--background: transparent;">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/ajuste" color="primary" class="text-cyan-400"></ion-back-button>
+    </ion-buttons>
+    <ion-title class="font-bold">Produtos</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true" class="relative text-text-main">
+  <div class="fixed inset-0 w-full h-full z-0 pointer-events-none">
+    <img src="assets/followers.jpg" class="w-full h-full object-cover" alt="Background" />
+    <div class="absolute inset-0 bg-gradient-to-b from-[#05161A]/70 via-[#05161A]/85 to-[#05161A]"></div>
+  </div>
+
+  <div class="relative z-10 px-5 pt-6 pb-10 space-y-5">
+    <p class="text-sm text-red-400" *ngIf="errorMessage">{{ errorMessage }}</p>
+    <p class="text-sm text-white/60" *ngIf="loading">Carregando...</p>
+
+    <ng-container *ngIf="data">
+      <!-- Aquário -->
+      <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl space-y-4">
+        <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Aquário</p>
+
+        <label class="block space-y-1">
+          <span class="text-sm text-white/70">Volume líquido do sistema (L)</span>
+          <input type="number" min="0" step="1" [(ngModel)]="data.tank.volumeLitros" class="field" placeholder="400" />
+        </label>
+
+        <div>
+          <span class="text-sm text-white/70">Alvos</span>
+          <div class="grid grid-cols-3 gap-2 mt-1">
+            <label *ngFor="let param of params" class="space-y-1">
+              <span class="text-[11px] text-white/50">{{ paramLabel(param) }}</span>
+              <input type="number" min="0" step="0.1" [(ngModel)]="data.tank.alvos[param]" class="field" />
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <span class="text-sm text-white/70">Fotoperíodo (opcional)</span>
+          <div class="grid grid-cols-2 gap-2 mt-1">
+            <label class="space-y-1">
+              <span class="text-[11px] text-white/50">Luz liga</span>
+              <input type="time" [(ngModel)]="luzLiga" class="field" />
+            </label>
+            <label class="space-y-1">
+              <span class="text-[11px] text-white/50">Luz desliga</span>
+              <input type="time" [(ngModel)]="luzDesliga" class="field" />
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bombas -->
+      <div *ngFor="let form of forms"
+        class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between">
+          <p class="text-base font-bold text-white">{{ form.nome }}</p>
+          <span class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/40">Bomba {{ form.pumpId }}</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <label class="space-y-1">
+            <span class="text-[11px] text-white/50">Tipo</span>
+            <select [(ngModel)]="form.identidade" class="field">
+              <option *ngFor="let identity of identities" [ngValue]="identity.value">{{ identity.label }}</option>
+            </select>
+          </label>
+          <label class="space-y-1">
+            <span class="text-[11px] text-white/50">Produto</span>
+            <input type="text" maxlength="40" [(ngModel)]="form.produto" class="field" placeholder="Ex.: Aquaforest KH" />
+          </label>
+        </div>
+
+        <div *ngIf="hasPotency(form)" class="space-y-1">
+          <span class="text-[11px] text-white/50">Potência (do rótulo do produto)</span>
+          <div class="flex items-center gap-2 text-sm text-white/70">
+            <input type="number" min="0" step="0.1" [(ngModel)]="form.doseMl" class="field w-20" placeholder="ml" />
+            <span>ml em</span>
+            <input type="number" min="0" step="1" [(ngModel)]="form.porLitros" class="field w-20" placeholder="L" />
+            <span>L sobem</span>
+            <input type="number" min="0" step="0.01" [(ngModel)]="form.eleva" class="field w-20" />
+            <span>{{ unitOf(form) }}</span>
+          </div>
+        </div>
+
+        <div *ngIf="!isMeasured(form) && form.identidade !== 'Nenhuma'" class="space-y-1">
+          <span class="text-[11px] text-white/50">Seguir a dose de outra bomba (opcional)</span>
+          <div class="flex items-center gap-2 text-sm text-white/70">
+            <span>Dose =</span>
+            <input type="number" min="0" step="0.01" [(ngModel)]="form.vinculoFator" class="field w-20" placeholder="fator" />
+            <span>×</span>
+            <select [(ngModel)]="form.vinculoPumpId" class="field flex-1">
+              <option [ngValue]="null">Nenhuma</option>
+              <option *ngFor="let other of linkOptions(form)" [ngValue]="other.pumpId">{{ other.nome }}</option>
+            </select>
+          </div>
+          <p class="text-[11px] text-white/40">Ex.: o fabricante recomenda 1 ml de potássio para cada 5 ml de cálcio → fator 0,2.</p>
+        </div>
+
+        <div *ngIf="isMeasured(form)" class="grid grid-cols-2 gap-2">
+          <label class="space-y-1">
+            <span class="text-[11px] text-white/50">Subida máx. por dia ({{ unitOf(form) }})</span>
+            <input type="number" min="0" step="0.1" [(ngModel)]="form.limiteDiario" class="field"
+              [placeholder]="info[form.identidade].limiteDiario" />
+          </label>
+          <label class="space-y-1">
+            <span class="text-[11px] text-white/50">Margem do teste (±{{ unitOf(form) }})</span>
+            <input type="number" min="0" step="0.1" [(ngModel)]="form.precisaoTeste" class="field"
+              [placeholder]="info[form.identidade].precisaoTeste" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Regras -->
+      <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl space-y-4">
+        <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Regras e avisos</p>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="space-y-1">
+            <span class="text-[11px] text-white/50">Distância KH ↔ Ca (min)</span>
+            <input type="number" min="0" step="5" [(ngModel)]="data.tank.regras.intervaloMinimo" class="field" />
+          </label>
+          <label class="space-y-1">
+            <span class="text-[11px] text-white/50">Máx. por dose de KH (dKH)</span>
+            <input type="number" min="0" step="0.05" [(ngModel)]="data.tank.regras.limitePorDoseKH" class="field" />
+          </label>
+          <label class="space-y-1">
+            <span class="text-[11px] text-white/50">Mudança máx. por ciclo (%)</span>
+            <input type="number" min="0" step="5" [(ngModel)]="variacaoPercent" class="field" />
+          </label>
+          <label class="space-y-1">
+            <span class="text-[11px] text-white/50">Aviso de estoque (dias)</span>
+            <input type="number" min="0" step="1" [(ngModel)]="data.tank.regras.diasEstoqueMin" class="field" />
+          </label>
+        </div>
+        <div class="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5">
+          <div class="flex flex-col">
+            <span class="text-sm font-semibold text-white/90">Notificar cada dose</span>
+            <span class="text-[11px] text-white/50">Avisos no celular nos horários programados (app Android).</span>
+          </div>
+          <ion-toggle [(ngModel)]="data.tank.notificarDoses"></ion-toggle>
+        </div>
+      </div>
+
+      <button type="button" (click)="save()" [disabled]="saving"
+        class="w-full h-12 rounded-xl btn-outline font-bold tracking-wider hover:bg-cyan-400/10 disabled:opacity-50">
+        {{ saving ? 'Salvando...' : 'Salvar produtos' }}
+      </button>
+    </ng-container>
+  </div>
+
+  <ion-toast [isOpen]="toastOpen" [message]="toastMessage" duration="2000" (didDismiss)="toastOpen = false"></ion-toast>
+</ion-content>
