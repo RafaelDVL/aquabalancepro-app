@@ -73,7 +73,8 @@ type RawConfig = Record<string, RawBomb>;
 export class DoserService {
   private readonly apiUrl = 'http://192.168.4.1';
   private readonly scheduleCount = 3;
-  private readonly bombCount = 4;
+  // Fallback: a contagem real vem das chaves bombN retornadas pelo firmware
+  private readonly bombCount = 5;
   private readonly plainJsonHeaders = new HttpHeaders({
     'Content-Type': 'text/plain',
   });
@@ -167,7 +168,7 @@ export class DoserService {
   }
 
   private mapBombs(raw: RawConfig): BombConfig[] {
-    return Array.from({ length: this.bombCount }, (_, i) => i + 1).map((id) => {
+    return Array.from({ length: this.resolveBombCount(raw) }, (_, i) => i + 1).map((id) => {
       const key = `bomb${id}`;
       const bomb = raw?.[key] ?? {};
       const legacySchedule: RawSchedule = {
@@ -190,6 +191,14 @@ export class DoserService {
         schedules,
       };
     });
+  }
+
+  private resolveBombCount(raw: RawConfig): number {
+    const ids = Object.keys(raw ?? {})
+      .map((key) => /^bomb(\d+)$/.exec(key)?.[1])
+      .map(Number)
+      .filter((id) => Number.isInteger(id) && id > 0);
+    return ids.length ? Math.max(...ids) : this.bombCount;
   }
 
   private toSchedule(raw: RawSchedule | undefined, index: number): ScheduleConfig {

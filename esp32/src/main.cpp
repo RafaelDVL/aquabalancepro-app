@@ -16,20 +16,22 @@
 #define BOMBA2_PIN 5
 #define BOMBA3_PIN 6
 #define BOMBA4_PIN 7
+#define BOMBA5_PIN 8
 #define LED_PIN 48
 #define LED_COUNT 1
 #define I2C_SDA 21
 #define I2C_SCL 20
 
-#define BOMBA_COUNT 4
+#define BOMBA_COUNT 5
 #define SCHEDULE_COUNT 3
-#define MAX_PUMP_QUEUE 14
+// Buffer circular guarda MAX_PUMP_QUEUE - 1 jobs: 15 agendamentos (5x3) + 2 doses manuais
+#define MAX_PUMP_QUEUE 18
 #define CONFIG_DOC_SIZE 10240
 #define LOG_LIMIT 300
 #define LOG_FILE "/logs.jsonl"
 #define LOG_TEMP_FILE "/logs.tmp"
 
-const uint8_t PUMP_PINS[BOMBA_COUNT] = {BOMBA1_PIN, BOMBA2_PIN, BOMBA3_PIN, BOMBA4_PIN};
+const uint8_t PUMP_PINS[BOMBA_COUNT] = {BOMBA1_PIN, BOMBA2_PIN, BOMBA3_PIN, BOMBA4_PIN, BOMBA5_PIN};
 
 // --- Wi-Fi ---
 const char *AP_SSID = "AquaBalancePro";
@@ -854,7 +856,9 @@ void saveBombasConfig()
   if (!prefsReady) return;
   Serial.println("[config] Salvando configuracoes na memoria (Preferences)...");
   String json = buildConfigJson();
-  preferences.putString("bombas", json);
+  // Strings no NVS sao limitadas a ~4000 bytes; putString retorna 0 em caso de falha
+  if (preferences.putString("bombas", json) == 0)
+    Serial.printf("[config] ERRO: Falha ao salvar config (%u bytes)\n", static_cast<unsigned int>(json.length()));
 }
 
 String buildConfigJson()

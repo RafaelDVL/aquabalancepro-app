@@ -12,6 +12,7 @@ graph TD
     ESP -->|GPIO| Pump2[Bomba 2 - GPIO5]
     ESP -->|GPIO| Pump3[Bomba 3 - GPIO6]
     ESP -->|GPIO| Pump4[Bomba 4 - GPIO7]
+    ESP -->|GPIO| Pump5[Bomba 5 - GPIO8]
     ESP -->|I2C| RTC[DS3231 RTC]
     ESP -->|LittleFS| Logs[Logs JSONL]
     ESP -->|NVS| Config[Configuração]
@@ -56,7 +57,7 @@ O ESP32 expõe um servidor HTTP na porta `80` no IP `192.168.4.1`. O app se comu
 |---|---|---|
 | `GET` | `/ping` | Health check |
 | `GET` | `/status` | Status do dispositivo (hora, Wi-Fi, AP) |
-| `GET` | `/config` | Configuração atual das 4 bombas |
+| `GET` | `/config` | Configuração atual das 5 bombas |
 | `POST` | `/config` | Atualizar configuração das bombas |
 | `POST` | `/time` | Sincronizar RTC com o celular |
 | `POST` | `/dose` | Dosagem manual imediata |
@@ -96,6 +97,7 @@ platformio device monitor        # Serial monitor (115200 baud)
 | 5 | Bomba 2 |
 | 6 | Bomba 3 |
 | 7 | Bomba 4 |
+| 8 | Bomba 5 |
 | 21 (SDA) | DS3231 RTC |
 | 20 (SCL) | DS3231 RTC |
 | 48 | NeoPixel WS2812B |

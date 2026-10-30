@@ -45,6 +45,7 @@ GPIO4        ──────────── Sinal da Bomba 1
 GPIO5        ──────────── Sinal da Bomba 2
 GPIO6        ──────────── Sinal da Bomba 3
 GPIO7        ──────────── Sinal da Bomba 4
+GPIO8        ──────────── Sinal da Bomba 5
 
 ESP32-S3                  NeoPixel WS2812B
 GPIO48       ──[300Ω]──── DATA IN
@@ -61,13 +62,13 @@ O firmware é **monolítico** em um único arquivo: `esp32/src/main.cpp` (1360 l
 | Linhas | Seção | Descrição |
 |---|---|---|
 | 1–12 | **Includes** | WiFi.h, AsyncTCP.h, ESPAsyncWebServer.h, RTClib.h, ArduinoJson.h, Adafruit_NeoPixel.h, LittleFS.h, Preferences.h, time.h |
-| 14–32 | **Config Geral** | `TEMPO_POR_ML = 700` (ms/ml base), `BOMBA_COUNT = 4`, `SCHEDULE_COUNT = 3`, `PUMP_PINS[4] = {4,5,6,7}`, `MAX_PUMP_QUEUE = 14`, `CONFIG_DOC_SIZE = 10240`, `LOG_LIMIT = 300` |
+| 14–32 | **Config Geral** | `TEMPO_POR_ML = 700` (ms/ml base), `BOMBA_COUNT = 5`, `SCHEDULE_COUNT = 3`, `PUMP_PINS[5] = {4,5,6,7,8}`, `MAX_PUMP_QUEUE = 18`, `CONFIG_DOC_SIZE = 10240`, `LOG_LIMIT = 300` |
 | 34–43 | **WiFi** | `AP_SSID = "AquaBalancePro"`, `AP_PASSWORD = "12345678"`, `STA_SSID` e `STA_PASSWORD` (placeholder), `isStaConfigured()` |
 | 45–49 | **Objetos Globais** | `RTC_DS3231 rtc`, `Preferences preferences`, `AsyncWebServer server(80)`, `Adafruit_NeoPixel statusLed` |
 | 51–62 | **Controle** | Timers de WiFi e NTP, flag `timeSynced` |
 | 64–84 | **Struct Schedule** | `hour`, `minute`, `dosagem`, `status`, `diasSemana[7]`, `lastRunMinute` |
 | 86–103 | **Struct Bomb** | `name`, `calibrCoef`, `quantidadeEstoque`, `schedules[SCHEDULE_COUNT]` |
-| 105 | **Bombas** | `bombas[BOMBA_COUNT]` — array global com as 4 bombas |
+| 105 | **Bombas** | `bombas[BOMBA_COUNT]` — array global com as 5 bombas |
 | 97–112 | **Fila de Bombas** | `PumpJob` (bombId, duration, startTime, origem, active), buffer circular com `head`/`tail`, mutex `pumpQueueMux` |
 | 114–134 | **Flags + LED** | `rtcReady`, `prefsReady`, `fsReady`, `systemReady`, estado/modo/PWM do LED |
 | 136–199 | **Forward Declarations** | Protótipos de todas as funções |
@@ -89,7 +90,7 @@ O firmware é **monolítico** em um único arquivo: `esp32/src/main.cpp` (1360 l
 
 ```
 1. Serial.begin(115200)
-2. inicializarBombas()        → LOOP sobre PUMP_PINS[4] = {4,5,6,7} como OUTPUT, LOW
+2. inicializarBombas()        → LOOP sobre PUMP_PINS[5] = {4,5,6,7,8} como OUTPUT, LOW
 3. Wire.begin(21, 20)         → I2C para RTC
 4. rtc.begin()                → DS3231 (flag rtcReady)
 5. preferences.begin("bomb-config", false) → NVS (flag prefsReady)
@@ -184,7 +185,7 @@ Status completo do dispositivo.
 
 #### `GET /config`
 
-Configuração completa das 4 bombas.
+Configuração completa das 5 bombas.
 
 **Resposta (200):**
 ```json
@@ -207,7 +208,8 @@ Configuração completa das 4 bombas.
   },
   "bomb2": { "...": "..." },
   "bomb3": { "...": "..." },
-  "bomb4": { "...": "..." }
+  "bomb4": { "...": "..." },
+  "bomb5": { "...": "..." }
 }
 ```
 
@@ -217,7 +219,7 @@ Configuração completa das 4 bombas.
 
 Atualiza configuração das bombas.
 
-**Request body:** Mesmo formato do GET /config (objeto com `bomb1`, `bomb2`, `bomb3`, `bomb4`).
+**Request body:** Mesmo formato do GET /config (objeto com `bomb1` … `bomb5`).
 
 **Resposta (200):**
 ```json
@@ -354,9 +356,9 @@ Limpa todo o histórico.
 - **Formato:** String JSON (~2KB)
 - **Inicialização:** `preferences.begin("bomb-config", false)`
 - **Save:** `saveBombasConfig()` — serializa `bombas[BOMBA_COUNT]` como JSON e grava
-- **Load:** `loadBombasConfig()` — lê JSON do NVS, deserializa, popula array. Inclui **migração automática**: se algum slot estiver vazio (ex: upgrade de 3→4 bombas), preenche com valores default
+- **Load:** `loadBombasConfig()` — lê JSON do NVS, deserializa, popula array. Inclui **migração automática**: se algum slot estiver vazio (ex: upgrade de 4→5 bombas), preenche com valores default
 - **Default:** Se NVS vazio, `initDefaultBombasConfig()` cria:
-  - Nomes: "Bomba 1", "Bomba 2", "Bomba 3", "Bomba 4"
+  - Nomes: "Bomba 1", "Bomba 2", "Bomba 3", "Bomba 4", "Bomba 5"
   - `calibrCoef = 1.0`
   - `quantidadeEstoque = 1000.0`
   - Todos os 3 schedules desabilitados
@@ -407,7 +409,7 @@ struct PumpJob {
   bool active;          // true se está executando agora
 };
 
-PumpJob pumpQueue[MAX_PUMP_QUEUE];  // 10 slots
+PumpJob pumpQueue[MAX_PUMP_QUEUE];  // 18 slots (17 jobs úteis)
 int head = 0, tail = 0;
 portMUX_TYPE pumpQueueMux = portMUX_INITIALIZER_UNLOCKED;
 ```
@@ -539,9 +541,9 @@ lib_deps =
 
 ```cpp
 constexpr int TEMPO_POR_ML = 700;         // ms para dosar 1ml (base)
-constexpr int BOMBA_COUNT = 4;            // número de bombas
+constexpr int BOMBA_COUNT = 5;            // número de bombas
 constexpr int SCHEDULE_COUNT = 3;         // schedules por bomba
-constexpr int MAX_PUMP_QUEUE = 14;        // tamanho da fila circular
+constexpr int MAX_PUMP_QUEUE = 18;        // tamanho da fila circular (guarda N-1 jobs)
 constexpr int LOG_LIMIT = 300;            // máximo de linhas no arquivo de log
 constexpr unsigned long WIFI_COOLDOWN_MS = 15000;   // intervalo entre tentativas de reconexão STA
 constexpr unsigned long NTP_INTERVAL_MS = 60000;    // intervalo entre tentativas NTP

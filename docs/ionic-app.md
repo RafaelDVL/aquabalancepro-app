@@ -95,7 +95,7 @@ Todas as rotas usam `PreloadAllModules` para pré-carregar após o bootstrap. Na
 
 ### Gerenciamento de Estado
 
-**Não há biblioteca de estado** (sem NgRx, NgXs, Akita, Signals). Cada página mantém seu estado localmente e recarrega dados do ESP32 ao entrar (`ionViewWillEnter`). O único dado persistente entre sessões é a cor personalizada das bombas, armazenada em `localStorage` (chave `abp-bomb-colores`). As cores default são: Bomba 1 = `#2DD4BF` (teal), Bomba 2 = `#F472B6` (pink), Bomba 3 = `#A855F7` (purple), Bomba 4 = `#3B82F6` (blue).
+**Não há biblioteca de estado** (sem NgRx, NgXs, Akita, Signals). Cada página mantém seu estado localmente e recarrega dados do ESP32 ao entrar (`ionViewWillEnter`). O único dado persistente entre sessões é a cor personalizada das bombas, armazenada em `localStorage` (chave `abp-bomb-colores`). As cores default são: Bomba 1 = `#2DD4BF` (teal), Bomba 2 = `#F472B6` (pink), Bomba 3 = `#A855F7` (purple), Bomba 4 = `#3B82F6` (blue), Bomba 5 = `#F59E0B` (amber).
 
 ## Páginas
 
@@ -126,10 +126,10 @@ Todas as rotas usam `PreloadAllModules` para pré-carregar após o bootstrap. Na
 
 **Arquivos:** `configuracao/`
 
-**Função:** Configurar até 4 bombas, cada uma com 3 horários de dosagem.
+**Função:** Configurar até 5 bombas, cada uma com 3 horários de dosagem.
 
 **Estado local:**
-- `bombs: BombForm[]` — 4 bombas com schedules, cores, schedule ativo
+- `bombs: BombForm[]` — 5 bombas com schedules, cores, schedule ativo
 - `expandedBombIndex: number` — accordion atual
 - `isLoading, error` — flags
 
@@ -250,7 +250,7 @@ interface DailyDataPoint {
 | Método | HTTP | Descrição |
 |---|---|---|
 | `getStatus()` | `GET /status` | Status do dispositivo. Mapeia `RawStatus` → `DeviceStatus`. |
-| `getConfig()` | `GET /config` | Config das 4 bombas. Mapeia `RawConfig` (objeto chaveado) → `BombConfig[]` via `Array.from({length: bombCount})`. Suporta legacy (schedule único) e novo formato (array). |
+| `getConfig()` | `GET /config` | Config das bombas. Mapeia `RawConfig` (objeto chaveado) → `BombConfig[]`; a quantidade vem do maior `bombN` retornado pelo firmware (`bombCount = 5` é só fallback). Suporta legacy (schedule único) e novo formato (array). |
 | `saveConfig(bombs)` | `POST /config` | Salva config. Body: JSON string. Header: `Content-Type: text/plain`. |
 | `setTime(date)` | `POST /time` | Sincroniza RTC. Body: `{ "time": "DD/MM/AAAA HH:mm:ss" }`. |
 | `testDose(bombId, dosagem, origem?)` | `POST /dose` | Dosagem manual. Body: `{ "bomb": id, "dosagem": ml, "origem": "..." }`. |

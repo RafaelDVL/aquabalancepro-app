@@ -17,7 +17,7 @@ O código embarcado para o controlador de dosagem.
 
 - **Localização**: `/esp32`
 - **Framework**: PlatformIO / Arduino Framework.
-- **Hardware**: ESP32-S3, RTC DS3231, 4 bombas peristálticas.
+- **Hardware**: ESP32-S3, RTC DS3231, 5 bombas peristálticas.
 
 ## Documentos Disponíveis
 
