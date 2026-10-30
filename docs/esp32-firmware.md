@@ -62,7 +62,7 @@ O firmware é **monolítico** em um único arquivo: `esp32/src/main.cpp` (1360 l
 | Linhas | Seção | Descrição |
 |---|---|---|
 | 1–12 | **Includes** | WiFi.h, AsyncTCP.h, ESPAsyncWebServer.h, RTClib.h, ArduinoJson.h, Adafruit_NeoPixel.h, LittleFS.h, Preferences.h, time.h |
-| 14–32 | **Config Geral** | `TEMPO_POR_ML = 700` (ms/ml base), `BOMBA_COUNT = 5`, `SCHEDULE_COUNT = 3`, `PUMP_PINS[5] = {4,5,6,7,8}`, `MAX_PUMP_QUEUE = 18`, `CONFIG_DOC_SIZE = 10240`, `LOG_LIMIT = 300` |
+| 14–32 | **Config Geral** | `TEMPO_POR_ML = 700` (ms/ml base), `BOMBA_COUNT = 5`, `SCHEDULE_COUNT = 3`, `PUMP_PINS[5] = {4,5,6,7,8}`, `MAX_PUMP_QUEUE = 18`, `CONFIG_DOC_SIZE = 10240`, `LOG_LIMIT = 2000`, `LOG_TRIM_BATCH = 200` |
 | 34–43 | **WiFi** | `AP_SSID = "AquaBalancePro"`, `AP_PASSWORD = "12345678"`, `STA_SSID` e `STA_PASSWORD` (placeholder), `isStaConfigured()` |
 | 45–49 | **Objetos Globais** | `RTC_DS3231 rtc`, `Preferences preferences`, `AsyncWebServer server(80)`, `Adafruit_NeoPixel statusLed` |
 | 51–62 | **Controle** | Timers de WiFi e NTP, flag `timeSynced` |
@@ -384,22 +384,22 @@ Valida que o body é um objeto JSON (máx. `DOSING_MAX_SIZE` = 16 KB → senão 
 
 - **Arquivo:** `/logs.jsonl`
 - **Formato:** JSONL (uma linha JSON por entrada)
-- **Limite:** `LOG_LIMIT = 300` entradas
+- **Limite:** `LOG_LIMIT = 2000` entradas (~220 KB, cerca de 4 meses com 5 bombas × 3 horários)
 - **Inicialização:** `initLogStorage()`:
   1. Monta LittleFS (`LittleFS.begin(false)`)
   2. Se falhar, formata (`LittleFS.format()`)
   3. Abre/cria `logs.jsonl`
   4. Conta linhas com `countLogLines()`
-  5. Se > 300, executa `trimLogFile()` — remove as linhas mais antigas
+  5. Se > 2000, executa `trimLogFile()` — remove as linhas mais antigas
 - **Escrita:** `appendLocalLog()` — abre em modo append, escreve linha JSON, fecha
 - **Formato da linha:**
   ```json
   {"bombaId":1,"timestamp":"05/06/2026 14:30:00","bomba":"Cálcio","dosagem":5.0,"origem":"Programado"}
   ```
-- **Trim automático:** Ao adicionar log, se contagem > `LOG_LIMIT`, chama `trimLogFile()` que:
+- **Trim automático:** Ao adicionar log, se a contagem chegou a `LOG_LIMIT`, chama `trimLogFile()` removendo `LOG_TRIM_BATCH` linhas de uma vez (reescreve o arquivo a cada ~200 doses, não a cada dose):
   1. Abre `logs.jsonl` para leitura
   2. Abre `logs.tmp` para escrita
-  3. Escreve apenas as últimas `LOG_LIMIT` linhas
+  3. Pula as linhas mais antigas e copia o resto
   4. Remove original, renomeia `.tmp`
 
 ### LittleFS (Ajuste de Dosagem)
@@ -523,7 +523,7 @@ void updateStatusLed() {
 | **Fila de bombas cheia** | POST /dose retorna 409. |
 | **WiFi STA desconecta** | Reconexão automática a cada 15s. AP nunca desliga. |
 | **NTP falha** | Retenta a cada 60s. Timeout de 3s (não bloqueia o loop). |
-| **Log > 300 linhas** | Trim automático (remove as mais antigas). |
+| **Log ≥ 2000 linhas** | Trim automático em lote: remove as 200 mais antigas de uma vez. |
 | **Alocação de memória falha** | Request HTTP é ignorado, erro logado no serial. |
 
 ## Segurança
@@ -565,7 +565,8 @@ constexpr int TEMPO_POR_ML = 700;         // ms para dosar 1ml (base)
 constexpr int BOMBA_COUNT = 5;            // número de bombas
 constexpr int SCHEDULE_COUNT = 3;         // schedules por bomba
 constexpr int MAX_PUMP_QUEUE = 18;        // tamanho da fila circular (guarda N-1 jobs)
-constexpr int LOG_LIMIT = 300;            // máximo de linhas no arquivo de log
+constexpr int LOG_LIMIT = 2000;           // máximo de linhas no arquivo de log
+constexpr int LOG_TRIM_BATCH = 200;       // linhas removidas de uma vez ao atingir o limite
 constexpr unsigned long WIFI_COOLDOWN_MS = 15000;   // intervalo entre tentativas de reconexão STA
 constexpr unsigned long NTP_INTERVAL_MS = 60000;    // intervalo entre tentativas NTP
 constexpr int NTP_TIMEOUT_SEC = 3;        // timeout da chamada NTP
@@ -613,7 +614,7 @@ constexpr long GMT_OFFSET_SEC = -3 * 3600;          // UTC-3 (BRT)
 | **Consumo** | Sem deep sleep, esperado ~200-300mA com bombas desligadas |
 | **WiFi Sleep** | Desabilitado (`WiFi.setSleep(false)`) — prioriza latência |
 | **Fila de bombas** | Máximo 10 jobs simultâneos na fila |
-| **Logs** | Máximo 300 entradas no LittleFS (~15KB) |
+| **Logs** | Máximo 2000 entradas no LittleFS (~220 KB); `GET /logs` é enviado em partes (chunked) para não carregar tudo na RAM |
 | **Config JSON** | Documento de até 8192 bytes (`CONFIG_DOC_SIZE`) |
 | **NTP Timeout** | 3 segundos (não bloqueia loop) |
 | **I2C Speed** | Padrão (100kHz) |

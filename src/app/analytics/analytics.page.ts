@@ -1,93 +1,111 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
-import { ViewWillEnter, ViewWillLeave } from '@ionic/angular/standalone';
+import { Component, ElementRef, ViewChild } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import {
   IonBackButton,
   IonButtons,
   IonContent,
   IonHeader,
+  IonIcon,
   IonSegment,
   IonSegmentButton,
   IonSpinner,
   IonTitle,
   IonToolbar,
+  ViewWillEnter,
+  ViewWillLeave,
 } from '@ionic/angular/standalone';
-import { Chart, ChartConfiguration, registerables, Plugin } from 'chart.js';
+import { addIcons } from 'ionicons';
+import { chevronBack, chevronForward } from 'ionicons/icons';
+import { Chart, ChartConfiguration, Plugin, registerables } from 'chart.js';
 import { firstValueFrom } from 'rxjs';
-import { BombConfig, DoserService, LogEntry } from '../services/doser.service';
+import { BombConfig, DoserService } from '../services/doser.service';
+import { expectedDoses } from '../services/dose-check';
+import { DosingData, IDENTITIES, MEASURED_PARAMS, MeasuredParam } from '../services/dosing.models';
+import {
+  DailySeries,
+  ParsedLog,
+  PumpPeriodStats,
+  StockForecast,
+  addDays,
+  coverageStart,
+  dailySeries,
+  dayKey,
+  dayLabel,
+  paramSeries,
+  parseLogs,
+  periodStats,
+  startOfDay,
+  stockForecast,
+} from '../services/log-analytics';
+import { loadStoredColors, pumpColor, withAlpha } from '../services/pump-colors';
 
 // Desabilitar animações para melhor performance
 Chart.defaults.animation = false as any;
-
 Chart.register(...registerables);
 
-// Plugin customizado para desenhar overlay no gráfico diário
-const dailyChartOverlayPlugin: Plugin = {
-  id: 'dailyChartOverlay',
-  afterDatasetsDraw(chart: any) {
+type Period = 'dia' | '7' | '30';
+type TimelineState = 'executada' | 'manual' | 'pendente' | 'perdida';
+
+interface TimelinePoint {
+  x: number;
+  y: number;
+  dosagem: number;
+  estado: TimelineState;
+  hora: string;
+  programado?: string;
+}
+
+const MATCH_TOLERANCE_MIN = 30;
+const MISSED_COLOR = '#FBBF24';
+
+function fmt(value: number, decimals = 1): string {
+  return value.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: decimals });
+}
+
+function hhmm(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+// Linha da hora atual e rótulo de dose acima de cada ponto (só no gráfico da timeline)
+const timelineOverlayPlugin: Plugin = {
+  id: 'timelineOverlay',
+  afterDatasetsDraw(chart: any, _args: unknown, options: { showNow?: boolean }) {
     const ctx = chart.ctx;
+    const { x: xScale, y: yScale } = chart.scales;
 
-    // Desenhar linha pontilhada da hora atual
-    const now = new Date();
-    const currentHour = now.getHours() + now.getMinutes() / 60;
-
-    if (currentHour >= 0 && currentHour <= 24) {
-      const xScale = chart.scales.x;
-      const yScale = chart.scales.y;
-
-      const x = xScale.getPixelForValue(currentHour);
-      const yTop = yScale.getPixelForValue(yScale.max);
-      const yBottom = yScale.getPixelForValue(yScale.min);
-
+    if (options?.showNow) {
+      const now = new Date();
+      const x = xScale.getPixelForValue(now.getHours() + now.getMinutes() / 60);
       ctx.save();
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)';
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 5]);
       ctx.beginPath();
-      ctx.moveTo(x, yTop);
-      ctx.lineTo(x, yBottom);
+      ctx.moveTo(x, yScale.getPixelForValue(yScale.max));
+      ctx.lineTo(x, yScale.getPixelForValue(yScale.min));
       ctx.stroke();
       ctx.restore();
     }
 
-    // Desenhar doses acima dos pontos
     chart.data.datasets.forEach((dataset: any, datasetIndex: number) => {
       const meta = chart.getDatasetMeta(datasetIndex);
-      if (!meta.hidden && meta.data) {
-        meta.data.forEach((element: any, index: number) => {
-          const point = dataset.data[index];
-          if (point && point.dosagem) {
-            const x = element.x;
-            const y = element.y - 25;
-
-            ctx.save();
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-            ctx.font = '10px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'bottom';
-            ctx.fillText(point.dosagem.toFixed(1) + 'ml', x, y);
-            ctx.restore();
-          }
-        });
-      }
+      if (meta.hidden) return;
+      meta.data.forEach((element: any, index: number) => {
+        const point = dataset.data[index] as TimelinePoint;
+        if (!point?.dosagem) return;
+        ctx.save();
+        ctx.fillStyle = point.estado === 'perdida' ? MISSED_COLOR : 'rgba(255, 255, 255, 0.7)';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(`${fmt(point.dosagem)} ml`, element.x, element.y - 12);
+        ctx.restore();
+      });
     });
   },
 };
-
-Chart.register(dailyChartOverlayPlugin);
-
-type ChartType = 'daily';
-
-interface DailyDataPoint {
-  hour: number;
-  minute: number;
-  bombId: number;
-  dosagem: number;
-  origem: string;
-  scheduled: boolean;
-  isExecuted?: boolean;
-  scheduledTime?: string; // New: stores original scheduled time if merged
-}
 
 @Component({
   selector: 'app-analytics',
@@ -95,169 +113,428 @@ interface DailyDataPoint {
   styleUrls: ['./analytics.page.scss'],
   imports: [
     CommonModule,
+    FormsModule,
     IonBackButton,
     IonButtons,
     IonContent,
     IonHeader,
+    IonIcon,
+    IonSegment,
+    IonSegmentButton,
     IonSpinner,
     IonTitle,
     IonToolbar,
   ],
 })
 export class AnalyticsPage implements ViewWillEnter, ViewWillLeave {
-  @ViewChild('dailyCanvas', { static: false }) dailyCanvas?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('timelineCanvas') timelineCanvas?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('barsCanvas') barsCanvas?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('paramCanvas') paramCanvas?: ElementRef<HTMLCanvasElement>;
 
+  readonly params = MEASURED_PARAMS;
+  readonly info = IDENTITIES;
   loading = false;
   errorMessage = '';
+  period: Period = 'dia';
+  param: MeasuredParam = 'KH';
+  selectedDay = startOfDay(new Date());
 
-  private dailyChart?: Chart;
-  private logs: LogEntry[] = [];
+  stats: PumpPeriodStats[] = [];
+  forecasts: StockForecast[] = [];
+  coverageNote = '';
+  dosing: DosingData | null = null;
+  dosingError = '';
+
   private bombs: BombConfig[] = [];
-  private readonly colorStorageKey = 'abp-bomb-colors';
-  private readonly defaultColors: Record<number, string> = {
-    1: '#2DD4BF',
-    2: '#F472B6',
-    3: '#A855F7',
-    4: '#3B82F6',
-    5: '#F59E0B',
-  };
-  private storedColors: Record<string, string> = {};
+  private logs: ParsedLog[] = [];
+  private colors: Record<string, string> = {};
+  private charts: Chart[] = [];
 
-  constructor(private readonly doser: DoserService) {}
+  constructor(
+    private readonly doser: DoserService,
+    private readonly router: Router,
+  ) {
+    addIcons({ chevronBack, chevronForward });
+  }
 
   async ionViewWillEnter(): Promise<void> {
-    this.storedColors = this.getStoredColors();
+    this.colors = loadStoredColors();
+    this.selectedDay = startOfDay(new Date());
     await this.loadData();
-    // Pequeno delay para garantir que o canvas esteja renderizado no DOM
-    setTimeout(() => {
-      this.createCharts();
-    }, 100);
   }
 
   ionViewWillLeave(): void {
-    if (this.dailyChart) {
-      this.dailyChart.destroy();
-      this.dailyChart = undefined;
-    }
+    this.destroyCharts();
   }
 
   async loadData(): Promise<void> {
     this.loading = true;
     this.errorMessage = '';
     try {
-      const [logs, config] = await Promise.all([
+      const [logs, bombs] = await Promise.all([
         firstValueFrom(this.doser.getLogs()),
         firstValueFrom(this.doser.getConfig()),
       ]);
-      this.logs = logs;
-      this.bombs = config;
-      // Se o gráfico já existir (re-load manual), atualiza.
-      // Caso contrário, será criado no ionViewWillEnter/setTimeout
-      if (this.dailyChart) {
-        this.updateCharts();
+      this.logs = parseLogs(logs);
+      this.bombs = bombs;
+      try {
+        this.dosing = await firstValueFrom(this.doser.getDosingData(bombs.map((bomb) => bomb.id)));
+        this.dosingError = '';
+      } catch (error) {
+        this.dosing = null;
+        this.dosingError = error instanceof Error ? error.message : 'Dados do Ajuste de Dosagem indisponíveis.';
       }
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : 'Falha ao carregar dados.';
     } finally {
       this.loading = false;
     }
+    this.refresh();
   }
 
-  private createCharts(): void {
-    this.createDailyChart();
+  // --- Estado da tela -------------------------------------------------------
+
+  get isToday(): boolean {
+    return dayKey(this.selectedDay) === dayKey(new Date());
   }
 
-  private updateCharts(): void {
-    this.updateDailyChart();
+  get dayTitle(): string {
+    return dayLabel(this.selectedDay, new Date());
   }
 
-  private createDailyChart(): void {
-    if (!this.dailyCanvas?.nativeElement) return;
-    
-    // Garantir limpeza anterior
-    if (this.dailyChart) {
-      this.dailyChart.destroy();
-      this.dailyChart = undefined;
+  get canGoBack(): boolean {
+    const oldest = this.logs[this.logs.length - 1]?.quando;
+    return !!oldest && startOfDay(oldest) < this.selectedDay;
+  }
+
+  get totals(): { ml: number; manualMl: number; percentual: number | null } {
+    const programadas = this.stats.reduce((sum, item) => sum + item.programadas, 0);
+    const executadas = this.stats.reduce((sum, item) => sum + item.executadas, 0);
+    return {
+      ml: this.stats.reduce((sum, item) => sum + item.totalMl, 0),
+      manualMl: this.stats.reduce((sum, item) => sum + item.manualMl, 0),
+      percentual: programadas ? Math.round((executadas / programadas) * 100) : null,
+    };
+  }
+
+  get hasParamData(): boolean {
+    return !!this.dosing && paramSeries(this.dosing.sessoes, this.param).length > 0;
+  }
+
+  color(pumpId: number): string {
+    return pumpColor(pumpId, this.colors);
+  }
+
+  fmt(value: number, decimals = 1): string {
+    return fmt(value, decimals);
+  }
+
+  forecastOf(pumpId: number): StockForecast | undefined {
+    return this.forecasts.find((item) => item.pumpId === pumpId);
+  }
+
+  forecastLabel(pumpId: number): string {
+    const forecast = this.forecastOf(pumpId);
+    if (!forecast || forecast.acabaEm === null) return forecast && forecast.estoque <= 0 ? 'estoque não informado' : '—';
+    const date = forecast.acabaEm;
+    return `acaba ~${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')} (${forecast.dias} d)`;
+  }
+
+  percentClass(value: number | null): string {
+    if (value === null) return 'text-white/40';
+    if (value >= 95) return 'text-green-400';
+    if (value >= 80) return 'text-amber-300';
+    return 'text-red-400';
+  }
+
+  setPeriod(period: Period): void {
+    this.period = period;
+    if (period === 'dia') this.selectedDay = startOfDay(new Date());
+    this.refresh();
+  }
+
+  setParam(param: MeasuredParam): void {
+    this.param = param;
+    this.refresh();
+  }
+
+  shiftDay(delta: number): void {
+    const next = addDays(this.selectedDay, delta);
+    if (next > startOfDay(new Date())) return;
+    this.selectedDay = next;
+    this.refresh();
+  }
+
+  openAjuste(): void {
+    void this.router.navigateByUrl('/ajuste');
+  }
+
+  // --- Cálculo + gráficos ---------------------------------------------------
+
+  private refresh(): void {
+    const now = new Date();
+    let from: Date;
+    let to: Date;
+    if (this.period === 'dia') {
+      from = this.selectedDay;
+      to = this.isToday ? now : addDays(this.selectedDay, 1);
+    } else {
+      const days = Number(this.period);
+      from = coverageStart(this.logs, startOfDay(addDays(now, -(days - 1))));
+      to = now;
+      const requested = startOfDay(addDays(now, -(days - 1)));
+      this.coverageNote = from > requested ? `Logs disponíveis desde ${dayLabel(from, now).toLowerCase()}.` : '';
+    }
+    if (this.period === 'dia') this.coverageNote = '';
+
+    this.stats = periodStats(this.bombs, this.logs, from, to).filter(
+      (item) => item.programadas > 0 || item.totalMl > 0,
+    );
+    this.forecasts = stockForecast(this.bombs, this.logs, now);
+    setTimeout(() => this.renderCharts(), 0);
+  }
+
+  private renderCharts(): void {
+    this.destroyCharts();
+    if (this.period === 'dia') this.renderTimeline();
+    else this.renderBars();
+    this.renderParam();
+  }
+
+  private destroyCharts(): void {
+    this.charts.forEach((chart) => chart.destroy());
+    this.charts = [];
+  }
+
+  private timelineData(): { pumps: BombConfig[]; points: Map<number, TimelinePoint[]> } {
+    const day = this.selectedDay;
+    const end = addDays(day, 1);
+    const now = new Date();
+    const dayLogs = this.logs.filter((log) => log.quando >= day && log.quando < end);
+    const used = new Set<ParsedLog>();
+    const points = new Map<number, TimelinePoint[]>();
+    const push = (pumpId: number, point: TimelinePoint) => points.set(pumpId, [...(points.get(pumpId) ?? []), point]);
+
+    for (const dose of expectedDoses(this.bombs, day, new Date(end.getTime() - 1))) {
+      const match = dayLogs.find(
+        (log) =>
+          !used.has(log) &&
+          log.kind === 'programado' &&
+          Number(log.bombaId) === dose.pumpId &&
+          Math.abs(log.quando.getTime() - dose.quando.getTime()) <= MATCH_TOLERANCE_MIN * 60000,
+      );
+      if (match) {
+        used.add(match);
+        push(dose.pumpId, {
+          x: match.quando.getHours() + match.quando.getMinutes() / 60,
+          y: 0,
+          dosagem: match.dosagem,
+          estado: 'executada',
+          hora: hhmm(match.quando),
+          programado: hhmm(dose.quando),
+        });
+      } else {
+        const perdida = dose.quando.getTime() + 5 * 60000 < now.getTime();
+        push(dose.pumpId, {
+          x: dose.quando.getHours() + dose.quando.getMinutes() / 60,
+          y: 0,
+          dosagem: dose.dosagem,
+          estado: perdida ? 'perdida' : 'pendente',
+          hora: hhmm(dose.quando),
+        });
+      }
     }
 
-    const ctx = this.dailyCanvas.nativeElement.getContext('2d');
-    if (!ctx) return;
+    for (const log of dayLogs) {
+      if (used.has(log)) continue;
+      push(Number(log.bombaId), {
+        x: log.quando.getHours() + log.quando.getMinutes() / 60,
+        y: 0,
+        dosagem: log.dosagem,
+        estado: log.kind === 'programado' ? 'executada' : 'manual',
+        hora: hhmm(log.quando),
+      });
+    }
 
-    const data = this.getDailyData();
+    const pumps = this.bombs.filter((bomb) => points.has(bomb.id));
+    pumps.forEach((bomb, index) => points.get(bomb.id)!.forEach((point) => (point.y = pumps.length - index)));
+    return { pumps, points };
+  }
 
-    const datasets: any[] = [];
-    const bombIds = [...new Set(data.map(d => d.bombId))].sort((a, b) => a - b);
+  private renderTimeline(): void {
+    const canvas = this.timelineCanvas?.nativeElement;
+    if (!canvas) return;
+    const { pumps, points } = this.timelineData();
+    const names = new Map(pumps.map((bomb, index) => [pumps.length - index, bomb.name || `Bomba ${bomb.id}`]));
 
-    bombIds.forEach((bombId) => {
-      const bombData = data.filter(d => d.bombId === bombId);
-      datasets.push({
-        label: this.getBombName(bombId),
-        data: bombData.map((d) => {
-          const point: any = {
-            x: d.hour + d.minute / 60,
-            y: bombId,
-            dosagem: d.dosagem,
-            origem: d.origem,
-            scheduled: d.scheduled,
-            scheduledTime: d.scheduledTime, // Pass through
-            isExecuted: d.isExecuted
-          };
-          return point;
-        }),
-        backgroundColor: this.getPumpColor(bombId),
-        borderColor: this.getPumpColor(bombId),
+    const datasets = pumps.map((bomb) => {
+      const color = this.color(bomb.id);
+      const data = points.get(bomb.id)!;
+      return {
+        label: bomb.name || `Bomba ${bomb.id}`,
+        data,
         pointRadius: 8,
         pointHoverRadius: 10,
-        pointStyle: (ctx: any) => {
-          const dataPoint = bombData[ctx.dataIndex];
-          // Losango para executados, círculo para programados
-          return (dataPoint?.isExecuted || !dataPoint?.scheduled) ? 'rectRot' : 'circle';
-        },
-      });
+        pointBorderWidth: 2,
+        pointStyle: data.map((point) =>
+          point.estado === 'executada' ? 'rectRot' : point.estado === 'manual' ? 'triangle' : 'circle',
+        ),
+        backgroundColor: data.map((point) =>
+          point.estado === 'perdida' ? 'transparent' : point.estado === 'pendente' ? withAlpha(color, 0.35) : color,
+        ),
+        borderColor: data.map((point) => (point.estado === 'perdida' ? MISSED_COLOR : color)),
+      };
     });
 
     const config: ChartConfiguration = {
       type: 'scatter',
+      data: { datasets: datasets as any },
+      plugins: [timelineOverlayPlugin],
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          timelineOverlay: { showNow: this.isToday },
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (context: any) => {
+                const point = context.raw as TimelinePoint;
+                const dose = `${fmt(point.dosagem)} ml`;
+                switch (point.estado) {
+                  case 'executada':
+                    return point.programado && point.programado !== point.hora
+                      ? `Programado ${point.programado} · executado ${point.hora} (${dose})`
+                      : `Executado ${point.hora} (${dose})`;
+                  case 'manual':
+                    return `Dose manual ${point.hora} (${dose})`;
+                  case 'perdida':
+                    return `Sem registro ${point.hora} (${dose})`;
+                  default:
+                    return `Programado ${point.hora} (${dose})`;
+                }
+              },
+            },
+          },
+        } as any,
+        scales: {
+          x: {
+            type: 'linear',
+            min: 0,
+            max: 24,
+            ticks: { stepSize: 4, color: '#94a3b8', callback: (value: any) => `${value}h` },
+            grid: { color: 'rgba(148, 163, 184, 0.1)' },
+          },
+          y: {
+            type: 'linear',
+            min: 0.4,
+            max: pumps.length + 0.6,
+            ticks: {
+              stepSize: 1,
+              color: '#cbd5e1',
+              font: { size: 11 },
+              callback: (value: any) => names.get(Number(value)) ?? '',
+            },
+            grid: { color: 'rgba(148, 163, 184, 0.1)' },
+          },
+        },
+      },
+    };
+    this.charts.push(new Chart(canvas, config));
+  }
+
+  private renderBars(): void {
+    const canvas = this.barsCanvas?.nativeElement;
+    if (!canvas) return;
+    const series: DailySeries = dailySeries(this.bombs, this.logs, Number(this.period), new Date());
+    const config: ChartConfiguration = {
+      type: 'bar',
       data: {
-        datasets: datasets,
+        labels: series.labels,
+        datasets: series.series.map((item) => ({
+          label: item.nome,
+          data: item.values,
+          backgroundColor: this.color(item.pumpId),
+          borderRadius: 3,
+          maxBarThickness: 22,
+        })),
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        interaction: {
-          mode: 'nearest',
-          intersect: false,
-        },
-        onHover: null as any,
         plugins: {
-          legend: {
-            display: true,
-            position: 'bottom',
-            labels: {
-              color: '#ffffff',
-              font: { size: 11 },
-              padding: 15,
-              usePointStyle: true,
-              pointStyle: 'circle',
-            },
+          legend: { position: 'bottom', labels: { color: '#e2e8f0', boxWidth: 10, font: { size: 11 } } },
+          tooltip: { callbacks: { label: (context: any) => `${context.dataset.label}: ${fmt(context.raw, 2)} ml` } },
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: '#94a3b8', maxRotation: 0, autoSkip: true }, grid: { display: false } },
+          y: {
+            stacked: true,
+            beginAtZero: true,
+            ticks: { color: '#94a3b8', callback: (value: any) => `${value} ml` },
+            grid: { color: 'rgba(148, 163, 184, 0.1)' },
           },
+        },
+      },
+    };
+    this.charts.push(new Chart(canvas, config));
+  }
+
+  private renderParam(): void {
+    const canvas = this.paramCanvas?.nativeElement;
+    if (!canvas || !this.dosing) return;
+    const points = paramSeries(this.dosing.sessoes, this.param);
+    if (!points.length) return;
+
+    const target = this.dosing.tank.alvos[this.param];
+    const minX = points[0].x;
+    const maxX = points[points.length - 1].x;
+    const pad = Math.max((maxX - minX) * 0.05, 12 * 60 * 60 * 1000);
+    const unit = IDENTITIES[this.param].unit;
+    const dateLabel = (value: number) => {
+      const date = new Date(value);
+      return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
+    };
+
+    const config: ChartConfiguration = {
+      type: 'line',
+      data: {
+        datasets: [
+          {
+            label: IDENTITIES[this.param].label,
+            data: points.map((point) => ({ x: point.x, y: point.y })),
+            borderColor: '#22d3ee',
+            backgroundColor: '#22d3ee',
+            tension: 0.25,
+            pointRadius: points.map((point) => (point.ajuste ? 7 : 4)),
+            pointStyle: points.map((point) => (point.ajuste ? 'rectRot' : 'circle')),
+            pointBackgroundColor: points.map((point) => (point.ajuste ? '#F59E0B' : '#22d3ee')),
+          },
+          {
+            label: 'Alvo',
+            data: [
+              { x: minX - pad, y: target },
+              { x: maxX + pad, y: target },
+            ],
+            borderColor: 'rgba(74, 222, 128, 0.7)',
+            borderDash: [6, 6],
+            borderWidth: 1.5,
+            pointRadius: 0,
+          },
+        ] as any,
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
           tooltip: {
-            enabled: true,
             callbacks: {
+              title: (items: any[]) => dateLabel(items[0].parsed.x),
               label: (context: any) => {
-                const point = context.raw as any;
-                if (!point) return '';
-
-                const hour = Math.floor(point.x);
-                const minute = Math.round((point.x % 1) * 60);
-                const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-
-                if (point.scheduledTime) {
-                  return `Programado: ${point.scheduledTime} - Executado: ${timeStr} (${point.dosagem.toFixed(1)}ml)`;
-                }
-                
-                const prefix = point.scheduled ? 'Programado' : 'Executado';
-                return `${prefix}: ${timeStr} (${point.dosagem.toFixed(1)}ml) - ${point.origem}`;
+                if (context.datasetIndex === 1) return `Alvo: ${fmt(target, 2)} ${unit}`;
+                const point = points[context.dataIndex];
+                return `${fmt(point.y, 2)} ${unit}${point.ajuste ? ' · doses ajustadas' : ''}`;
               },
             },
           },
@@ -265,194 +542,18 @@ export class AnalyticsPage implements ViewWillEnter, ViewWillLeave {
         scales: {
           x: {
             type: 'linear',
-            min: 0,
-            max: 24,
-            ticks: {
-              stepSize: 2,
-              color: '#94a3b8',
-              callback: (value: any) => `${value}h`,
-            },
+            min: minX - pad,
+            max: maxX + pad,
+            ticks: { color: '#94a3b8', maxTicksLimit: 6, callback: (value: any) => dateLabel(Number(value)) },
             grid: { color: 'rgba(148, 163, 184, 0.1)' },
-          } as any,
+          },
           y: {
-            type: 'linear',
-            min: bombIds.length > 0 ? Math.min(...bombIds) - 0.5 : 0.5,
-            max: bombIds.length > 0 ? Math.max(...bombIds) + 0.5 : 3.5,
-            ticks: {
-              stepSize: 1,
-              color: '#94a3b8',
-              callback: (value: any) => {
-                const bombId = value as number;
-                if (bombIds.includes(bombId)) {
-                  return '● ';
-                }
-                return '';
-              },
-            },
+            ticks: { color: '#94a3b8', callback: (value: any) => `${fmt(Number(value), 2)}` },
             grid: { color: 'rgba(148, 163, 184, 0.1)' },
-          } as any,
-        } as any,
-      } as any,
-    };
-
-    this.dailyChart = new Chart(ctx, config);
-  }
-
-  private updateDailyChart(): void {
-    if (!this.dailyChart) return;
-
-    const data = this.getDailyData();
-    const bombIds = [...new Set(data.map(d => d.bombId))].sort((a, b) => a - b);
-
-    // Reconstruir datasets
-    this.dailyChart.data.datasets = bombIds.map((bombId) => {
-      const bombData = data.filter(d => d.bombId === bombId);
-      return {
-        label: this.getBombName(bombId),
-        data: bombData.map((d) => {
-          const point: any = {
-            x: d.hour + d.minute / 60,
-            y: bombId,
-            dosagem: d.dosagem,
-            origem: d.origem,
-            scheduled: d.scheduled,
-            scheduledTime: d.scheduledTime,
-            isExecuted: d.isExecuted
-          };
-          return point;
-        }),
-        backgroundColor: this.getPumpColor(bombId),
-        borderColor: this.getPumpColor(bombId),
-        pointRadius: 8,
-        pointHoverRadius: 10,
-        pointStyle: (ctx: any) => {
-          const dataPoint = bombData[ctx.dataIndex];
-          return (dataPoint?.isExecuted || !dataPoint?.scheduled) ? 'rectRot' : 'circle';
+          },
         },
-      };
-    });
-
-    this.dailyChart.update();
-  }
-
-  private getDailyData(): DailyDataPoint[] {
-    const today = new Date();
-    const todayStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
-
-    // 1. Obter executados hoje
-    const executed: DailyDataPoint[] = this.logs
-      .filter((log) => log.timestamp.startsWith(todayStr) && log.origem.toLowerCase() !== 'teste')
-      .map((log) => {
-        const [, timePart] = log.timestamp.split(' ');
-        const [hour, minute] = (timePart || '00:00').split(':').map(Number);
-        return {
-          hour: hour || 0,
-          minute: minute || 0,
-          bombId: log.bombaId,
-          dosagem: log.dosagem,
-          origem: log.origem,
-          scheduled: false,
-          isExecuted: true,
-        };
-      });
-
-    // 2. Obter programados para hoje
-    const dayOfWeek = today.getDay();
-    const scheduled: DailyDataPoint[] = [];
-    this.bombs.forEach((bomb) => {
-      bomb.schedules.forEach((schedule) => {
-        if (schedule.status && schedule.diasSemana[dayOfWeek]) {
-          scheduled.push({
-            hour: schedule.hour,
-            minute: schedule.minute,
-            bombId: bomb.id,
-            dosagem: schedule.dosagem,
-            origem: 'Programado',
-            scheduled: true,
-          });
-        }
-      });
-    });
-
-    // 3. Mesclar (Matching)
-    // Se houver um executado com mesmo BombID e Dosagem, e horário PRÓXIMO (+/- 15 min),
-    // consideramos que o programado JÁ FOI executado.
-    // Marcamos o executado com "scheduledTime" e REMOVEMOS o scheduled da lista.
-
-    const finalScheduled: DailyDataPoint[] = [];
-
-    // Otimização: Agrupar executados por bombId para evitar busca O(N*M)
-    const executedByBombId: { [key: number]: { exec: DailyDataPoint, index: number }[] } = {};
-    executed.forEach((exec, index) => {
-      if (!executedByBombId[exec.bombId]) {
-        executedByBombId[exec.bombId] = [];
-      }
-      executedByBombId[exec.bombId].push({ exec, index });
-    });
-
-    scheduled.forEach((sched) => {
-      const schedTimeVal = sched.hour * 60 + sched.minute;
-
-      let matchIndex = -1;
-      const candidates = executedByBombId[sched.bombId];
-
-      if (candidates) {
-        for (let i = 0; i < candidates.length; i++) {
-          const c = candidates[i];
-          // Já foi mergeado?
-          if (c.exec.scheduledTime) continue;
-
-          // Mesma bomba e dosagem aprox (float compare)
-          if (Math.abs(c.exec.dosagem - sched.dosagem) > 0.05) continue;
-
-          // Tolerância de tempo (ex: +/- 30 minutos)
-          // Isso cobre casos onde o relógio do ESP estava levemente adiantado/atrasado ou delay de rede
-          const execTimeVal = c.exec.hour * 60 + c.exec.minute;
-          const diff = Math.abs(execTimeVal - schedTimeVal);
-
-          if (diff <= 30) {
-            matchIndex = c.index;
-            break;
-          }
-        }
-      }
-
-      if (matchIndex !== -1) {
-        // Encontrou correspondência!
-        // Atualiza o executado com infos do programado
-        const scheduledTimeStr = `${String(sched.hour).padStart(2,'0')}:${String(sched.minute).padStart(2,'0')}`;
-        executed[matchIndex].scheduledTime = scheduledTimeStr;
-        // NÃO adiciona ao finalScheduled pois já está representado no executado
-      } else {
-        // Não encontrou, então ainda deve acontecer (ou falhou/foi perdido)
-        finalScheduled.push(sched);
-      }
-    });
-
-    // IMPORTANTE: Retornar [...scheduled, ...executed]
-    // Isso garante que os 'executed' (Losangos) sejam desenhados POR ÚLTIMO (em cima)
-    return [...finalScheduled, ...executed];
-  }
-
-  private getPumpColor(id: number): string {
-    const fromStorage = this.storedColors[String(id)];
-    return fromStorage ?? this.defaultColors[id] ?? '#0F969C';
-  }
-
-  private getBombName(id: number): string {
-    const bomb = this.bombs.find((b) => b.id === id);
-    return bomb?.name || `Bomba ${id}`;
-  }
-
-  private getStoredColors(): Record<string, string> {
-    try {
-      const raw = localStorage.getItem(this.colorStorageKey);
-      if (!raw) return {};
-      const parsed = JSON.parse(raw) as Record<string, string>;
-      if (!parsed || typeof parsed !== 'object') return {};
-      return parsed;
-    } catch {
-      return {};
-    }
+      },
+    };
+    this.charts.push(new Chart(canvas, config));
   }
 }

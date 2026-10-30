@@ -9,6 +9,7 @@
 #include <ESPAsyncWebServer.h>
 #include <Adafruit_NeoPixel.h>
 #include <time.h>
+#include <memory>
 
 // --- Configurações Gerais ---
 #define TEMPO_POR_ML 700
@@ -27,7 +28,9 @@
 // Buffer circular guarda MAX_PUMP_QUEUE - 1 jobs: 15 agendamentos (5x3) + 2 doses manuais
 #define MAX_PUMP_QUEUE 18
 #define CONFIG_DOC_SIZE 10240
-#define LOG_LIMIT 300
+#define LOG_LIMIT 2000
+// Ao atingir o limite, remove um lote de linhas antigas de uma vez (evita reescrever o arquivo a cada dose)
+#define LOG_TRIM_BATCH 200
 #define LOG_FILE "/logs.jsonl"
 #define LOG_TEMP_FILE "/logs.tmp"
 #define DOSING_FILE "/dosing.json"
@@ -578,29 +581,58 @@ void handleGetLogs(AsyncWebServerRequest *request)
     return;
   }
 
-  File file = LittleFS.open(LOG_FILE, FILE_READ);
-  if (!file)
+  // Envia em partes (chunked), lendo o arquivo aos poucos: com LOG_LIMIT alto o JSON inteiro não cabe na RAM
+  struct LogStream
+  {
+    File file;
+    String pending;
+    bool first = true;
+    bool done = false;
+  };
+
+  auto state = std::make_shared<LogStream>();
+  state->file = LittleFS.open(LOG_FILE, FILE_READ);
+  if (!state->file)
   {
     request->send(500, "application/json", "{\"ok\":false,\"message\":\"falha ao abrir logs\"}");
     return;
   }
+  state->pending = "[";
 
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
-  response->print("[");
-  bool first = true;
+  AsyncWebServerResponse *response = request->beginChunkedResponse(
+      "application/json",
+      [state](uint8_t *buffer, size_t maxLen, size_t index) -> size_t
+      {
+        size_t written = 0;
+        while (written < maxLen)
+        {
+          if (state->pending.length() > 0)
+          {
+            size_t count = std::min(maxLen - written, static_cast<size_t>(state->pending.length()));
+            memcpy(buffer + written, state->pending.c_str(), count);
+            written += count;
+            state->pending.remove(0, count);
+            continue;
+          }
+          if (state->done) break;
 
-  while (file.available())
-  {
-    String line = file.readStringUntil('\n');
-    line.trim();
-    if (line.isEmpty()) continue;
-    if (!first) response->print(",");
-    response->print(line);
-    first = false;
-  }
+          if (!state->file.available())
+          {
+            state->file.close();
+            state->pending = "]";
+            state->done = true;
+            continue;
+          }
 
-  response->print("]");
-  file.close();
+          String line = state->file.readStringUntil('\n');
+          line.trim();
+          if (line.isEmpty()) continue;
+          if (!state->first) state->pending = ",";
+          state->pending += line;
+          state->first = false;
+        }
+        return written;
+      });
   request->send(response);
 }
 
@@ -890,7 +922,7 @@ void appendLocalLog(int bombaIndex, float dosagem, const String &origem, const D
 
   if (logCount >= LOG_LIMIT)
   {
-    size_t removeCount = (logCount - LOG_LIMIT) + 1;
+    size_t removeCount = (logCount - LOG_LIMIT) + LOG_TRIM_BATCH;
     if (!trimLogFile(removeCount))
     {
       Serial.println("[log] ERRO: Falha ao limpar logs antigos");

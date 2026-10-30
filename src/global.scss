@@ -74,6 +74,11 @@ ion-accordion-group {
   color: #22d3ee;
 }
 
+/* Botão de ação destrutiva em alertas (ex.: apagar logs) */
+.alert-button-danger.alert-button {
+  color: #f87171;
+}
+
 /* Alertas de confirmação com quebras de linha no texto */
 .alert-pre .alert-message {
   white-space: pre-line;

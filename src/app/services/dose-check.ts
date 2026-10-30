@@ -41,7 +41,11 @@ export function findMissedDoses(bombs: BombConfig[], logs: LogEntry[], since: Da
   const from = new Date(Math.max(since?.getTime() ?? 0, now.getTime() - MAX_WINDOW_MS));
   const to = new Date(now.getTime() - GRACE_MS);
   if (to <= from) return [];
+  return missedBetween(bombs, logs, from, to);
+}
 
+/** Doses programadas entre `from` e `to` (pela agenda atual) sem registro "Programado" no log. */
+export function missedBetween(bombs: BombConfig[], logs: LogEntry[], from: Date, to: Date): MissedDose[] {
   const programmed = logs
     .filter((log) => log.origem === 'Programado')
     .map((log) => ({ pumpId: Number(log.bombaId), quando: parseDeviceTime(log.timestamp) }))

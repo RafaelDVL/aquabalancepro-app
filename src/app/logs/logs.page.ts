@@ -1,30 +1,56 @@
 import { CommonModule } from '@angular/common';
 import { Component } from '@angular/core';
+import { Capacitor } from '@capacitor/core';
+import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import {
+  ActionSheetController,
+  AlertController,
   IonBackButton,
+  IonButton,
   IonButtons,
   IonContent,
-  IonFooter,
   IonHeader,
+  IonIcon,
+  IonRefresher,
+  IonRefresherContent,
   IonSpinner,
   IonTitle,
   IonToast,
-  IonToolbar, IonIcon } from '@ionic/angular/standalone';
+  IonToolbar,
+  RefresherCustomEvent,
+} from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
-import { flaskOutline } from 'ionicons/icons';
+import { ellipsisVertical, alertCircleOutline } from 'ionicons/icons';
 import { firstValueFrom } from 'rxjs';
-import { DoserService, LogEntry } from '../services/doser.service';
+import { BombConfig, DoserService } from '../services/doser.service';
+import { MissedDose, findMissedDoses } from '../services/dose-check';
+import { DayGroup, ORIGEM_LABELS, OrigemKind, ParsedLog, groupByDay, parseLogs, toCsv } from '../services/log-analytics';
+import { loadStoredColors, pumpColor } from '../services/pump-colors';
+
+type OrigemFilter = 'todas' | OrigemKind;
+
+type DayRow = { tipo: 'log'; quando: Date; log: ParsedLog } | { tipo: 'perdida'; quando: Date; dose: MissedDose };
+
+interface DayView extends DayGroup {
+  rows: DayRow[];
+}
+
+const DAYS_PER_PAGE = 7;
 
 @Component({
   selector: 'app-logs',
   templateUrl: './logs.page.html',
-  imports: [IonIcon,
+  imports: [
     CommonModule,
     IonBackButton,
+    IonButton,
     IonButtons,
     IonContent,
-    IonFooter,
     IonHeader,
+    IonIcon,
+    IonRefresher,
+    IonRefresherContent,
     IonSpinner,
     IonTitle,
     IonToast,
@@ -32,91 +58,101 @@ import { DoserService, LogEntry } from '../services/doser.service';
   ],
 })
 export class LogsPage {
-  logs: LogEntry[] = [];
+  readonly origemFilters: { value: OrigemFilter; label: string }[] = [
+    { value: 'todas', label: 'Todas' },
+    { value: 'programado', label: ORIGEM_LABELS.programado },
+    { value: 'manual', label: ORIGEM_LABELS.manual },
+    { value: 'calibracao', label: ORIGEM_LABELS.calibracao },
+  ];
+  logs: ParsedLog[] = [];
+  bombs: BombConfig[] = [];
+  missed: MissedDose[] = [];
+  groups: DayView[] = [];
+  pumpFilter: number | null = null;
+  origemFilter: OrigemFilter = 'todas';
+  visibleDays = DAYS_PER_PAGE;
   loading = false;
   clearing = false;
   errorMessage = '';
   toastMessage = '';
   toastOpen = false;
+  private colors: Record<string, string> = {};
 
-  // Usa o mesmo esquema da tela de configuração
-  private readonly colorStorageKey = 'abp-bomb-colors';
-  private readonly defaultColors: Record<number, string> = {
-    1: '#2DD4BF',
-    2: '#F472B6',
-    3: '#A855F7',
-    4: '#3B82F6',
-    5: '#F59E0B',
-  };
-  private storedColors: Record<string, string> = {};
-
-  constructor(private readonly doser: DoserService) {
-    addIcons({ flaskOutline });
-  }
-
-  getPumpColor(id: number | undefined): string {
-    const safeId = Number(id) || 1;
-    const fromStorage = this.storedColors[String(safeId)];
-    return fromStorage ?? this.defaultColors[safeId] ?? '#0F969C';
-  }
-
-  getPumpGradient(id: number | undefined): string {
-    const base = this.getPumpColor(id);
-    const start = this.colorWithAlpha(base, 0.95);
-    const end = this.colorWithAlpha(base, 0.35);
-    return `linear-gradient(180deg, ${start} 0%, ${end} 100%)`;
-  }
-
-  private colorWithAlpha(color: string, alpha: number): string {
-    const rgb = this.hexToRgb(color);
-    if (!rgb) return `rgba(15, 150, 156, ${alpha})`;
-    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
-  }
-
-  private hexToRgb(color: string): { r: number; g: number; b: number } | null {
-    const cleaned = color.replace('#', '').trim();
-    if (cleaned.length === 3) {
-      const r = parseInt(cleaned[0] + cleaned[0], 16);
-      const g = parseInt(cleaned[1] + cleaned[1], 16);
-      const b = parseInt(cleaned[2] + cleaned[2], 16);
-      return { r, g, b };
-    }
-    if (cleaned.length === 6) {
-      const r = parseInt(cleaned.slice(0, 2), 16);
-      const g = parseInt(cleaned.slice(2, 4), 16);
-      const b = parseInt(cleaned.slice(4, 6), 16);
-      return { r, g, b };
-    }
-    return null;
-  }
-
-  private getStoredColors(): Record<string, string> {
-    try {
-      const raw = localStorage.getItem(this.colorStorageKey);
-      if (!raw) return {};
-      const parsed = JSON.parse(raw) as Record<string, string>;
-      if (!parsed || typeof parsed !== 'object') return {};
-      return parsed;
-    } catch {
-      return {};
-    }
+  constructor(
+    private readonly doser: DoserService,
+    private readonly actionSheets: ActionSheetController,
+    private readonly alerts: AlertController,
+  ) {
+    addIcons({ ellipsisVertical, alertCircleOutline });
   }
 
   ionViewWillEnter(): void {
-    this.storedColors = this.getStoredColors();
+    this.colors = loadStoredColors();
     void this.loadLogs();
   }
 
-  ionViewWillLeave(): void {
-    // Cleanup if needed
+  get visibleGroups(): DayView[] {
+    return this.groups.slice(0, this.visibleDays);
+  }
+
+  get pumpsInLogs(): { id: number; nome: string }[] {
+    const ids = new Set(this.logs.map((log) => Number(log.bombaId)));
+    return [...ids].sort((a, b) => a - b).map((id) => ({ id, nome: this.pumpName(id, `Bomba ${id}`) }));
+  }
+
+  color(id: number | undefined): string {
+    return pumpColor(Number(id) || 1, this.colors);
+  }
+
+  /** Nome atual da bomba (o log guarda o nome da época da dose). */
+  pumpName(id: number, fallback: string): string {
+    return this.bombs.find((bomb) => bomb.id === id)?.name || fallback;
+  }
+
+  origemLabel(log: ParsedLog): string {
+    return ORIGEM_LABELS[log.kind];
+  }
+
+  hora(date: Date): string {
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  }
+
+  ml(value: number): string {
+    return `${Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ml`;
+  }
+
+  setPumpFilter(id: number | null): void {
+    this.pumpFilter = this.pumpFilter === id ? null : id;
+    this.rebuild();
+  }
+
+  setOrigemFilter(value: OrigemFilter): void {
+    this.origemFilter = value;
+    this.rebuild();
+  }
+
+  showMore(): void {
+    this.visibleDays += DAYS_PER_PAGE;
+  }
+
+  async onRefresh(event: RefresherCustomEvent): Promise<void> {
+    await this.loadLogs();
+    await event.target.complete();
   }
 
   async loadLogs(): Promise<void> {
     this.loading = true;
     this.errorMessage = '';
     try {
-      const logs = await firstValueFrom(this.doser.getLogs());
-      this.logs = this.sortLogs(logs);
+      const [logs, bombs] = await Promise.all([
+        firstValueFrom(this.doser.getLogs()),
+        firstValueFrom(this.doser.getConfig()).catch(() => [] as BombConfig[]),
+      ]);
+      this.logs = parseLogs(logs);
+      this.bombs = bombs;
+      this.missed = findMissedDoses(bombs, logs, null, new Date());
+      this.visibleDays = DAYS_PER_PAGE;
+      this.rebuild();
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : 'Falha ao carregar logs.';
     } finally {
@@ -124,15 +160,75 @@ export class LogsPage {
     }
   }
 
-  async clearLogs(): Promise<void> {
-    if (this.clearing || !this.logs.length) {
-      return;
+  async openMenu(): Promise<void> {
+    const sheet = await this.actionSheets.create({
+      header: 'Logs',
+      buttons: [
+        { text: 'Atualizar', handler: () => void this.loadLogs() },
+        { text: 'Exportar CSV', handler: () => void this.exportCsv() },
+        { text: 'Apagar todos os logs', role: 'destructive', handler: () => void this.confirmClear() },
+        { text: 'Cancelar', role: 'cancel' },
+      ],
+    });
+    await sheet.present();
+  }
+
+  async exportCsv(): Promise<void> {
+    if (!this.logs.length) return;
+    const csv = toCsv(this.logs, (id, fallback) => this.pumpName(id, fallback));
+    const fileName = `aquabalance-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+    try {
+      if (Capacitor.isNativePlatform()) {
+        const file = await Filesystem.writeFile({
+          path: fileName,
+          data: '﻿' + csv,
+          directory: Directory.Cache,
+          encoding: Encoding.UTF8,
+        });
+        await Share.share({ title: 'Logs do AquaBalance', files: [file.uri] });
+      } else {
+        const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      this.toastMessage = error instanceof Error ? error.message : 'Falha ao exportar.';
+      this.toastOpen = true;
     }
+  }
+
+  private async confirmClear(): Promise<void> {
+    const alert = await this.alerts.create({
+      header: 'Apagar todos os logs?',
+      message: `Os ${this.logs.length} registros do ESP32 serão apagados. Exporte o CSV antes se quiser guardar o histórico.`,
+      buttons: [
+        { text: 'Cancelar', role: 'cancel' },
+        { text: 'Exportar e apagar', role: 'export' },
+        { text: 'Apagar', role: 'destructive', cssClass: 'alert-button-danger' },
+      ],
+    });
+    await alert.present();
+    const { role } = await alert.onDidDismiss();
+    if (role === 'export') {
+      await this.exportCsv();
+      await this.clearLogs();
+    } else if (role === 'destructive') {
+      await this.clearLogs();
+    }
+  }
+
+  private async clearLogs(): Promise<void> {
+    if (this.clearing || !this.logs.length) return;
     this.clearing = true;
     this.errorMessage = '';
     try {
       await firstValueFrom(this.doser.clearLogs());
       this.logs = [];
+      this.missed = [];
+      this.rebuild();
       this.toastMessage = 'Logs apagados.';
       this.toastOpen = true;
     } catch (error) {
@@ -142,23 +238,21 @@ export class LogsPage {
     }
   }
 
-  isProgramado(log: LogEntry): boolean {
-    return (log.origem ?? '').toLowerCase().includes('program');
-  }
-
-  private sortLogs(logs: LogEntry[]): LogEntry[] {
-    return [...logs].sort((a, b) => this.parseTimestamp(b.timestamp) - this.parseTimestamp(a.timestamp));
-  }
-
-  private parseTimestamp(value: string | undefined): number {
-    if (!value) return 0;
-    const [datePart, timePart] = value.split(' ');
-    if (!datePart) return 0;
-    const [day, month, year] = datePart.split('/').map((part) => Number(part));
-    const [hour, minute, second] = (timePart ?? '').split(':').map((part) => Number(part));
-
-    if (!day || !month || !year) return 0;
-    const parsed = new Date(year, month - 1, day, hour || 0, minute || 0, second || 0);
-    return parsed.getTime();
+  private rebuild(): void {
+    const byPump = <T extends { bombaId?: number; pumpId?: number }>(item: T) =>
+      this.pumpFilter === null || Number(item.bombaId ?? item.pumpId) === this.pumpFilter;
+    const logs = this.logs.filter(
+      (log) => byPump(log) && (this.origemFilter === 'todas' || log.kind === this.origemFilter),
+    );
+    const showMissed = this.origemFilter === 'todas' || this.origemFilter === 'programado';
+    const missed = showMissed ? this.missed.filter((dose) => byPump(dose)) : [];
+    // Registros e doses não executadas do dia numa só lista, do horário mais recente ao mais antigo
+    this.groups = groupByDay(logs, missed, new Date()).map((group) => ({
+      ...group,
+      rows: [
+        ...group.logs.map((log): DayRow => ({ tipo: 'log', quando: log.quando, log })),
+        ...group.missed.map((dose): DayRow => ({ tipo: 'perdida', quando: dose.quando, dose })),
+      ].sort((a, b) => b.quando.getTime() - a.quando.getTime()),
+    }));
   }
 }

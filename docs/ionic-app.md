@@ -179,56 +179,32 @@ interface BombForm extends BombConfig {
 
 **Arquivos:** `logs/`
 
-**Função:** Visualizar histórico de dosagens.
+**Função:** Histórico de doses agrupado por dia.
 
-**Estado local:**
-- `logs: LogEntry[]`
-- `bombColors: Record<number, string>`
-- `isLoading, error`
-
-**Fluxo:**
-1. Carrega logs via `doserService.getLogs()`
-2. Ordena por timestamp (mais recente primeiro)
-3. Recupera cores das bombas do `localStorage`
-4. Exibe cada log com: nome da bomba (com cor), dosagem (ml), timestamp, origem
-5. Botão "Apagar todos Logs" → `doserService.clearLogs()`
+- Cabeçalho de cada dia ("Hoje", "Ontem", "Qua, 28/10") com nº de doses, total em ml e doses sem registro.
+- Linhas compactas (hora, bomba com nome atual e cor, dose, origem quando não é programada), em ordem cronológica
+  junto com as doses **não executadas** dos últimos 7 dias (`findMissedDoses`, em âmbar).
+- Filtros por bomba e por origem (Programado / Dose manual / Calibração).
+- Mostra 7 dias por vez ("Mostrar mais dias"); atualizar arrastando para baixo (`ion-refresher`).
+- Menu ⋯: Atualizar, **Exportar CSV** (`;` e vírgula decimal; no Android grava em cache e abre o compartilhar via
+  `@capacitor/filesystem` + `@capacitor/share`, no navegador baixa o arquivo) e **Apagar todos os logs** com
+  confirmação (opção "Exportar e apagar").
+- Funções puras em `services/log-analytics.ts` (`parseLogs`, `groupByDay`, `toCsv`).
 
 ### 5. AnalyticsPage — Gráficos
 
 **Arquivos:** `analytics/`
 
-**Função:** Gráfico scatter comparando dosagens programadas vs executadas ao longo do dia.
-
-**Estado local:**
-- `dailyData: DailyDataPoint[]` — merge de programados + executados do dia
-- `selectedDate: string` — data selecionada (YYYY-MM-DD)
-- `isLoading, error`
-
-**Modelo interno:**
-```typescript
-interface DailyDataPoint {
-  hour: number;
-  minute: number;
-  bombId: number;
-  dosagem: number;
-  origem: string;
-  scheduled: boolean;
-  isExecuted?: boolean;
-  scheduledTime?: string;
-}
-```
-
-**Fluxo:**
-1. Carrega config (schedules programados) e logs (execuções) via `doserService`
-2. Filtra logs do dia selecionado
-3. Faz merge: para cada schedule programado, busca log correspondente (tolerância de 30min)
-4. Renderiza gráfico scatter com Chart.js:
-   - **Círculos verdes**: dosagens programadas
-   - **X vermelhos**: dosagens executadas
-   - **Linha pontilhada vertical**: hora atual (overlay customizado)
-   - Anotações mostrando valor da dose ao lado de cada ponto
-5. Segment para trocar entre bombas
-6. Overlay customizado: linha de hora atual com plugin Chart.js
+- **Período:** Dia / 7 dias / 30 dias. Resumo: ml dosados, % de doses executadas e ml de doses manuais. Quando os
+  logs não cobrem o período inteiro, avisa a data do registro mais antigo.
+- **Dia:** timeline (Chart.js scatter) com o nome das bombas no eixo, setas para dias anteriores e estados:
+  executada (losango), programada (círculo claro), sem registro (círculo vazado âmbar) e manual (triângulo). A
+  linha da hora atual e os rótulos de dose vêm de um plugin aplicado só neste gráfico.
+- **7/30 dias:** barras empilhadas de ml por dia e por bomba (`dailySeries`).
+- **Por bomba:** total, média ml/dia, % executadas (agenda atual × registros "Programado") e previsão de fim do
+  estoque pelo consumo real dos últimos 7 dias (`stockForecast`).
+- **Parâmetros:** KH, Ca ou Mg ao longo das sessões do Ajuste de Dosagem (`paramSeries`), com linha do alvo e
+  losango laranja nas datas em que as doses foram ajustadas.
 
 ### 6. AjustePage — Ajuste de Dosagem (`/ajuste`)
 
@@ -415,6 +391,7 @@ Tema escuro fixo, definido em `theme/variables.scss`:
 | `services/dosing-rules.spec.ts` | Regras e sugestões |
 | `services/dose-check.spec.ts` | Conferência de doses no log |
 | `services/today-summary.spec.ts` | Resumo do dia da Home |
+| `services/log-analytics.spec.ts` | Agrupamento, estatísticas, séries e CSV dos logs |
 
 **Não há testes** para: `DoserService`, `WifiBindingService`, demais páginas, pipes, diretivas, ou integração HTTP.
 
