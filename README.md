@@ -61,6 +61,7 @@ O ESP32 expõe um servidor HTTP na porta `80` no IP `192.168.4.1`. O app se comu
 | `POST` | `/config` | Atualizar configuração das bombas |
 | `POST` | `/time` | Sincronizar RTC com o celular |
 | `POST` | `/dose` | Dosagem manual imediata |
+| `POST` | `/run` | Liga a bomba até desligar (com sinal do app a cada 1 s; para sozinha em 4 s sem sinal ou 2 min) |
 | `GET` | `/logs` | Histórico de dosagens |
 | `DELETE` | `/logs` | Limpar histórico |
 | `GET` | `/dosing` | Produtos, aquário e histórico do Ajuste de Dosagem (`{}` se vazio) |

@@ -177,9 +177,12 @@ Status completo do dispositivo.
   "ap": {
     "ssid": "AquaBalancePro",
     "ip": "192.168.4.1"
-  }
+  },
+  "run": { "bomb": 1, "ms": 12400 }
 }
 ```
+
+`run` só aparece com uma bomba em acionamento contínuo (`POST /run`): número da bomba e tempo ligada.
 
 ---
 
@@ -294,6 +297,40 @@ Comanda dosagem manual imediata.
 1. Valida bomb (1–4), dosagem (> 0)
 2. Calcula duração: `tempo = dosagem * TEMPO_POR_ML * bombas[bombId].calibrCoef` (em ms)
 3. `enqueuePumpJob(bombId, tempo, origem)` — insere na fila circular
+
+---
+
+#### `POST /run`
+
+Liga uma bomba até ela ser desligada (escorvar a mangueira, encher um copo).
+
+**Request body:**
+```json
+{ "bomb": 1, "acao": "ligar" }
+```
+
+| `acao` | Efeito |
+|---|---|
+| `ligar` | Pede para ligar a bomba. O loop liga na próxima volta, antes da fila de doses. |
+| `manter` | Renova o sinal. O app manda a cada ~1 s enquanto a bomba está ligada. |
+| `desligar` | Desliga. Sem acionamento em andamento, só responde `ok`. |
+
+**Respostas:**
+
+| Código | Body | Condição |
+|---|---|---|
+| 200 | `{ "ok": true }` | Pedido aceito |
+| 400 | `{ "ok": false, "message": "..." }` | JSON, bomba ou ação inválidos |
+| 409 | `{ "ok": false, "message": "outra dose em andamento" }` | `ligar` com outra bomba dosando |
+| 409 | `{ "ok": false, "message": "bomba parada" }` | `manter` sem a bomba ligada (já desligou sozinha) |
+
+**Travas de segurança:** a bomba desliga sozinha após `RUN_KEEPALIVE_MS` (4 s) sem `manter` (app fechado
+ou fora do Wi-Fi) e após `RUN_MAX_MS` (2 min) ligada. Ao desligar, o volume é estimado pelo tempo
+(`ms / (TEMPO_POR_ML × calibrCoef)`, 0,1 ml), descontado do estoque e gravado no log com origem
+`"Manual contínuo"`. Doses programadas que vencerem nesse meio-tempo esperam na fila.
+
+O handler HTTP só registra o pedido (`runStartRequest`, `runStopRequested`, `runKeepAlive`, sob
+`pumpQueueMux`); quem liga e desliga o pino é `processPumpQueue()` no loop.
 
 ---
 

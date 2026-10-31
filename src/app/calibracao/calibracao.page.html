@@ -195,14 +195,14 @@
       <div class="relative z-10 space-y-4">
         <div>
           <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Acionamento manual</p>
-          <p class="text-xs text-white/50 mt-1">Dose avulsa, registrada como “Manual” nos logs.</p>
+          <p class="text-xs text-white/50 mt-1">Dose avulsa ou bomba ligada até você desligar, registradas como “Manual” nos logs.</p>
         </div>
 
         <div class="space-y-2">
           <label class="text-sm text-white/70">Bomba</label>
           <div
             class="bg-white/5 rounded-xl px-4 py-2 border border-white/10 focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all">
-            <ion-select [(ngModel)]="quickTestBombId" class="bg-transparent text-white"
+            <ion-select [(ngModel)]="quickTestBombId" [disabled]="runBombId !== null" class="bg-transparent text-white"
               style="--placeholder-color: #6DA5C0; --color: #E0E0E0;">
               <ion-select-option *ngFor="let bomb of bombs" [value]="bomb.id">
                 {{ bombName(bomb) }}
@@ -244,11 +244,35 @@
         <ion-button fill="outline" expand="block"
           class="h-12 text-sm font-bold tracking-wider shadow-[0_0_15px_rgba(168,85,247,0.1)]"
           style="--border-color: #a855f7; --color: #d8b4fe; --border-radius: 12px; --border-width: 1.5px; --background-hover: rgba(168, 85, 247, 0.08); --ripple-color: #a855f7; --ripple-opacity: 0.2;"
-          (click)="runQuickTest()" [disabled]="!bombs.length">
+          (click)="runQuickTest()" [disabled]="!bombs.length || runBombId !== null">
           <ion-icon slot="start" name="water-outline" class="text-xl"></ion-icon>
           Liberar {{ num(quickTestDose) }} ml
           <span class="ml-1 font-normal opacity-70">(~{{ quickDuration() }} s)</span>
         </ion-button>
+
+        <div class="border-t border-white/10 pt-4 space-y-3">
+          <ng-container *ngIf="runBombId === null; else running">
+            <button type="button" (click)="toggleRun()" [disabled]="!bombs.length || runBusy"
+              class="w-full h-12 rounded-xl border border-white/15 bg-white/5 text-white text-sm font-bold flex items-center justify-center gap-2 hover:bg-white/10 active:scale-[0.98] transition-all disabled:opacity-40">
+              <ion-icon name="power-outline" class="text-lg"></ion-icon>
+              Ligar até eu desligar
+            </button>
+            <p class="text-[11px] text-white/40">
+              Para escorvar a mangueira ou encher o copo. Desliga sozinha após 2 min ou se o app perder a conexão.
+            </p>
+          </ng-container>
+
+          <ng-template #running>
+            <button type="button" (click)="toggleRun()"
+              class="w-full h-14 rounded-xl bg-red-500/90 text-white text-sm font-bold flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.35)] active:scale-[0.98] transition-all">
+              <ion-icon name="stop-circle-outline" class="text-xl"></ion-icon>
+              Desligar · {{ clock(runElapsedMs) }} · ~{{ num(runMl) }} ml
+            </button>
+            <p class="text-[11px] text-white/50 text-center">
+              Desliga sozinha em {{ clock(runRemainingMs) }} ou se o app perder a conexão.
+            </p>
+          </ng-template>
+        </div>
       </div>
     </div>
   </div>

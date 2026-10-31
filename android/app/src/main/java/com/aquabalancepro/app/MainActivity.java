@@ -6,7 +6,8 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
   @Override
   public void onCreate(Bundle savedInstanceState) {
-    super.onCreate(savedInstanceState);
+    // Plugins locais precisam ser registrados antes do super.onCreate, que cria a ponte com o WebView
     registerPlugin(WifiBindingPlugin.class);
+    super.onCreate(savedInstanceState);
   }
 }

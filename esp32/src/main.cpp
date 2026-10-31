@@ -36,6 +36,10 @@
 #define DOSING_FILE "/dosing.json"
 #define DOSING_TEMP_FILE "/dosing.tmp"
 #define DOSING_MAX_SIZE 16384
+// Acionamento contínuo: o app renova o sinal a cada ~1 s; sem sinal ou no limite, a bomba desliga sozinha
+#define RUN_KEEPALIVE_MS 4000
+#define RUN_MAX_MS 120000
+#define RUN_ORIGEM "Manual contínuo"
 
 const uint8_t PUMP_PINS[BOMBA_COUNT] = {BOMBA1_PIN, BOMBA2_PIN, BOMBA3_PIN, BOMBA4_PIN, BOMBA5_PIN};
 
@@ -130,6 +134,12 @@ unsigned long pumpStartTime = 0;
 unsigned long pumpDuration = 0;
 portMUX_TYPE pumpQueueMux = portMUX_INITIALIZER_UNLOCKED;
 
+// Acionamento contínuo: o handler HTTP só registra pedidos; quem liga e desliga é o loop
+bool continuousRun = false;
+volatile int runStartRequest = -1;
+volatile bool runStopRequested = false;
+volatile unsigned long runKeepAlive = 0;
+
 bool rtcReady = false;
 bool prefsReady = false;
 bool fsReady = false;
@@ -179,6 +189,7 @@ void handleGetConfig(AsyncWebServerRequest *request);
 void handlePostConfig(AsyncWebServerRequest *request);
 void handlePostTime(AsyncWebServerRequest *request);
 void handlePostDose(AsyncWebServerRequest *request);
+void handlePostRun(AsyncWebServerRequest *request);
 void handleGetLogs(AsyncWebServerRequest *request);
 void handleDeleteLogs(AsyncWebServerRequest *request);
 void handleGetDosing(AsyncWebServerRequest *request);
@@ -212,6 +223,8 @@ int pumpPinForIndex(int bombaIndex);
 void processPumpQueue();
 void startNextPumpJob();
 void finishPumpJob();
+void startContinuousRun(int bombaIndex);
+void stopContinuousRun(const char *motivo);
 
 // LED
 void setLedColor(uint8_t red, uint8_t green, uint8_t blue);
@@ -443,6 +456,13 @@ void handleStatus(AsyncWebServerRequest *request)
   ap["ssid"] = AP_SSID;
   ap["ip"] = WiFi.softAPIP().toString();
 
+  if (continuousRun)
+  {
+    JsonObject run = doc["run"].to<JsonObject>();
+    run["bomb"] = activeJob.bombaIndex + 1;
+    run["ms"] = millis() - pumpStartTime;
+  }
+
   String payload;
   serializeJson(doc, payload);
   request->send(200, "application/json", payload);
@@ -564,6 +584,68 @@ void handlePostDose(AsyncWebServerRequest *request)
   }
 
   request->send(200, "application/json", "{\"ok\":true}");
+}
+
+// Body: {"bomb": 1..5, "acao": "ligar" | "manter" | "desligar"}
+void handlePostRun(AsyncWebServerRequest *request)
+{
+  String body;
+  JsonDocument doc;
+  if (!readRequestBody(request, body) || deserializeJson(doc, body))
+  {
+    request->send(400, "application/json", "{\"ok\":false,\"message\":\"json invalido\"}");
+    return;
+  }
+
+  int bomba = doc["bomb"] | 0;
+  String acao = doc["acao"] | "";
+  if (bomba < 1 || bomba > BOMBA_COUNT)
+  {
+    request->send(400, "application/json", "{\"ok\":false,\"message\":\"bomba invalida\"}");
+    return;
+  }
+  int index = bomba - 1;
+
+  if (acao == "desligar")
+  {
+    portENTER_CRITICAL(&pumpQueueMux);
+    runStartRequest = -1;
+    runStopRequested = true;
+    portEXIT_CRITICAL(&pumpQueueMux);
+    request->send(200, "application/json", "{\"ok\":true}");
+    return;
+  }
+
+  if (acao != "ligar" && acao != "manter")
+  {
+    request->send(400, "application/json", "{\"ok\":false,\"message\":\"acao invalida\"}");
+    return;
+  }
+
+  // 0 = ok, 1 = outra dose em andamento, 2 = parada (tempo limite ou sem sinal)
+  int result = 0;
+  portENTER_CRITICAL(&pumpQueueMux);
+  bool runningThis = (continuousRun && activeJob.bombaIndex == index) || runStartRequest == index;
+  if (runningThis)
+    runKeepAlive = millis();
+  else if (acao == "manter")
+    result = 2;
+  else if (pumpActive || runStartRequest >= 0)
+    result = 1;
+  else
+  {
+    runStartRequest = index;
+    runStopRequested = false;
+    runKeepAlive = millis();
+  }
+  portEXIT_CRITICAL(&pumpQueueMux);
+
+  if (result == 1)
+    request->send(409, "application/json", "{\"ok\":false,\"message\":\"outra dose em andamento\"}");
+  else if (result == 2)
+    request->send(409, "application/json", "{\"ok\":false,\"message\":\"bomba parada\"}");
+  else
+    request->send(200, "application/json", "{\"ok\":true}");
 }
 
 void handleGetLogs(AsyncWebServerRequest *request)
@@ -749,6 +831,7 @@ void setupServer()
   server.on("/config", HTTP_POST, handlePostConfig, nullptr, storeRequestBody);
   server.on("/time", HTTP_POST, handlePostTime, nullptr, storeRequestBody);
   server.on("/dose", HTTP_POST, handlePostDose, nullptr, storeRequestBody);
+  server.on("/run", HTTP_POST, handlePostRun, nullptr, storeRequestBody);
   server.on("/logs", HTTP_GET, handleGetLogs);
   server.on("/logs", HTTP_DELETE, handleDeleteLogs);
   server.on("/dosing", HTTP_GET, handleGetDosing);
@@ -1345,12 +1428,78 @@ void startNextPumpJob()
   digitalWrite(pin, HIGH);
 }
 
+void startContinuousRun(int bombaIndex)
+{
+  activeJob = {bombaIndex, 0.0f, RUN_ORIGEM, rtc.now()};
+  pumpStartTime = millis();
+  pumpDuration = RUN_MAX_MS;
+  continuousRun = true;
+  pumpActive = true;
+
+  Serial.printf("[pump] BOMBA %d LIGADA (continuo, max %lu s)\n", bombaIndex + 1, (unsigned long)(RUN_MAX_MS / 1000));
+  digitalWrite(pumpPinForIndex(bombaIndex), HIGH);
+}
+
+void stopContinuousRun(const char *motivo)
+{
+  unsigned long elapsed = millis() - pumpStartTime;
+  float coef = bombas[activeJob.bombaIndex].calibrCoef;
+  // Mesma conta da dose (ml × 700 × coef), ao contrário; arredonda a 0,1 ml
+  activeJob.dosagem = roundf(elapsed / (TEMPO_POR_ML * coef) * 10.0f) / 10.0f;
+  continuousRun = false;
+
+  Serial.printf("[pump] Continuo encerrado (%s): %lu ms, ~%.1f ml\n", motivo, elapsed, activeJob.dosagem);
+  if (activeJob.dosagem > 0)
+  {
+    finishPumpJob();
+  }
+  else
+  {
+    digitalWrite(pumpPinForIndex(activeJob.bombaIndex), LOW);
+    pumpActive = false;
+  }
+}
+
 void processPumpQueue()
 {
+  if (continuousRun)
+  {
+    // Lê o último sinal antes do relógio: o handler pode renová-lo a qualquer momento
+    unsigned long lastSignal = runKeepAlive;
+    unsigned long now = millis();
+    if (runStopRequested)
+    {
+      runStopRequested = false;
+      stopContinuousRun("desligada no app");
+    }
+    else if (now - lastSignal > RUN_KEEPALIVE_MS)
+      stopContinuousRun("sem sinal do app");
+    else if (now - pumpStartTime >= RUN_MAX_MS)
+      stopContinuousRun("tempo limite");
+    return;
+  }
+
   if (pumpActive)
   {
     if (millis() - pumpStartTime >= pumpDuration)
       finishPumpJob();
+    return;
+  }
+
+  // Pedido de acionamento contínuo passa na frente da fila
+  int startIndex = -1;
+  portENTER_CRITICAL(&pumpQueueMux);
+  if (runStartRequest >= 0)
+  {
+    startIndex = runStartRequest;
+    runStartRequest = -1;
+  }
+  runStopRequested = false;
+  portEXIT_CRITICAL(&pumpQueueMux);
+
+  if (startIndex >= 0)
+  {
+    startContinuousRun(startIndex);
     return;
   }
   startNextPumpJob();

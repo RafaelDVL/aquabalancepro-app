@@ -1,6 +1,6 @@
 import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable, catchError, from, map, of, switchMap, throwError } from 'rxjs';
+import { Observable, TimeoutError, catchError, from, map, of, switchMap, throwError, timeout } from 'rxjs';
 import { WifiBindingService } from './wifi-binding.service';
 import { DosingData, normalizeDosingData } from './dosing.models';
 
@@ -28,7 +28,11 @@ export interface DeviceStatus {
   wifiIp?: string;
   apSsid?: string;
   apIp?: string;
+  /** Acionamento contínuo em andamento. */
+  run?: { bomb: number; ms: number };
 }
+
+export type RunAction = 'ligar' | 'manter' | 'desligar';
 
 export interface ApiStatusResponse {
   ok: boolean;
@@ -47,6 +51,7 @@ interface RawStatus {
   time?: string;
   wifi?: { connected?: boolean; rssi?: number; ip?: string };
   ap?: { ssid?: string; ip?: string };
+  run?: { bomb?: number; ms?: number };
 }
 
 interface RawSchedule {
@@ -74,6 +79,7 @@ type RawConfig = Record<string, RawBomb>;
 export class DoserService {
   private readonly apiUrl = 'http://192.168.4.1';
   private readonly scheduleCount = 3;
+  private readonly requestTimeoutMs = 10000;
   // Fallback: a contagem real vem das chaves bombN retornadas pelo firmware
   private readonly bombCount = 5;
   private readonly plainJsonHeaders = new HttpHeaders({
@@ -95,6 +101,7 @@ export class DoserService {
           wifiIp: raw.wifi?.ip,
           apSsid: raw.ap?.ssid,
           apIp: raw.ap?.ip,
+          run: raw.run?.bomb ? { bomb: raw.run.bomb, ms: raw.run.ms ?? 0 } : undefined,
         })),
       ),
     );
@@ -124,6 +131,17 @@ export class DoserService {
       this.http.post<ApiStatusResponse>(
         `${this.apiUrl}/time`,
         JSON.stringify({ time: this.formatDateTime(date) }),
+        { headers: this.plainJsonHeaders },
+      ),
+    );
+  }
+
+  /** Liga a bomba até desligar; o firmware para sozinho sem `manter` por 4 s ou após 2 min. */
+  runPump(bombId: number, acao: RunAction): Observable<ApiStatusResponse> {
+    return this.withWifiBinding(
+      this.http.post<ApiStatusResponse>(
+        `${this.apiUrl}/run`,
+        JSON.stringify({ bomb: bombId, acao }),
         { headers: this.plainJsonHeaders },
       ),
     );
@@ -190,6 +208,15 @@ export class DoserService {
     return from(this.wifiBinding.bindToWifi()).pipe(
       catchError(() => of(null)),
       switchMap(() => request),
+      // Sem resposta (ex.: Android mandando o tráfego pelos dados móveis), falha em vez de esperar para sempre
+      timeout(this.requestTimeoutMs),
+      catchError((error) =>
+        throwError(() =>
+          error instanceof TimeoutError
+            ? new Error('O ESP32 não respondeu. Confira se o celular está no Wi-Fi AquaBalancePro.')
+            : error,
+        ),
+      ),
     );
   }
 

@@ -15,11 +15,12 @@ import {
   IonToolbar,
   IonButton,
 } from '@ionic/angular/standalone';
+import { HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { BombConfig, DoserService } from '../services/doser.service';
 import { loadStoredColors, pumpColor } from '../services/pump-colors';
 import { addIcons } from 'ionicons';
-import { checkmarkCircleOutline, colorWandOutline, timerOutline, waterOutline } from 'ionicons/icons';
+import { checkmarkCircleOutline, colorWandOutline, powerOutline, stopCircleOutline, timerOutline, waterOutline } from 'ionicons/icons';
 
 /** Mesmo valor do firmware (TEMPO_POR_ML): duração da dose = ml × 700 ms × coeficiente. */
 const MS_PER_ML = 700;
@@ -31,6 +32,9 @@ const SANITY_LIMIT = 0.4;
 const VERIFY_TOLERANCE = 0.03;
 /** Doses manuais acima disso pedem confirmação. */
 const MANUAL_CONFIRM_ML = 10;
+/** Acionamento contínuo: sinal ao firmware a cada 1 s (ele desliga com 4 s sem sinal) e teto do firmware. */
+const RUN_KEEPALIVE_MS = 1000;
+const RUN_MAX_MS = 120000;
 
 type Step = 'setup' | 'running' | 'measure' | 'result' | 'verified';
 type Mode = 'calibrar' | 'conferir';
@@ -88,7 +92,14 @@ export class CalibracaoPage {
   errorMessage = '';
   toastMessage = '';
   toastOpen = false;
+  runBombId: number | null = null;
+  runElapsedMs = 0;
+  runBusy = false;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private runTimer: ReturnType<typeof setInterval> | null = null;
+  private runStartedAt = 0;
+  private lastKeepAlive = 0;
+  private keepAliveInFlight = false;
   private deadline = 0;
   private colors: Record<string, string> = {};
 
@@ -96,12 +107,13 @@ export class CalibracaoPage {
     private readonly doser: DoserService,
     private readonly alerts: AlertController,
   ) {
-    addIcons({ colorWandOutline, waterOutline, timerOutline, checkmarkCircleOutline });
+    addIcons({ colorWandOutline, waterOutline, timerOutline, checkmarkCircleOutline, powerOutline, stopCircleOutline });
   }
 
   async ionViewWillEnter(): Promise<void> {
     this.colors = loadStoredColors();
     await this.loadConfig();
+    await this.resumeRun();
   }
 
   color(id: number): string {
@@ -110,6 +122,7 @@ export class CalibracaoPage {
 
   ionViewWillLeave(): void {
     this.stopTimer();
+    if (this.runBombId !== null) void this.stopRun();
   }
 
   async loadConfig(): Promise<void> {
@@ -288,6 +301,110 @@ export class CalibracaoPage {
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : 'Falha ao enviar dose.';
     }
+  }
+
+  get runRemainingMs(): number {
+    return Math.max(0, RUN_MAX_MS - this.runElapsedMs);
+  }
+
+  /** Volume estimado pelo tempo ligado (mesma conta do firmware). */
+  get runMl(): number {
+    const bomb = this.bombs.find((item) => item.id === this.runBombId);
+    return this.runElapsedMs / (MS_PER_ML * (bomb?.calibrCoef || 1));
+  }
+
+  clock(ms: number): string {
+    const total = Math.floor(ms / 1000);
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+  }
+
+  async toggleRun(): Promise<void> {
+    if (this.runBombId !== null) {
+      await this.stopRun();
+      return;
+    }
+    if (this.runBusy) return;
+    this.runBusy = true;
+    this.errorMessage = '';
+    try {
+      await firstValueFrom(this.doser.runPump(this.quickTestBombId, 'ligar'));
+      this.beginRun(this.quickTestBombId, 0);
+    } catch (error) {
+      this.errorMessage =
+        error instanceof HttpErrorResponse && error.status === 409
+          ? 'Outra dose está em andamento. Aguarde terminar.'
+          : error instanceof Error
+            ? error.message
+            : 'Falha ao ligar a bomba.';
+    } finally {
+      this.runBusy = false;
+    }
+  }
+
+  async stopRun(): Promise<void> {
+    const bombId = this.runBombId;
+    if (bombId === null) return;
+    const ml = this.runMl;
+    const bomb = this.bombs.find((item) => item.id === bombId);
+    this.endRun();
+    try {
+      await firstValueFrom(this.doser.runPump(bombId, 'desligar'));
+      this.toastMessage = `${this.bombName(bomb)} desligada (~${this.num(ml)} ml).`;
+      this.toastOpen = true;
+    } catch {
+      this.errorMessage = 'Sem resposta do ESP32. A bomba desliga sozinha em até 4 s sem sinal do app.';
+    }
+  }
+
+  /** Volta à tela com a bomba ainda ligada (pelo app em outro aparelho, por exemplo). */
+  private async resumeRun(): Promise<void> {
+    if (this.runBombId !== null) return;
+    try {
+      const status = await firstValueFrom(this.doser.getStatus());
+      if (status.run) {
+        this.quickTestBombId = status.run.bomb;
+        this.beginRun(status.run.bomb, status.run.ms);
+      }
+    } catch {
+      // Sem status: a tela segue sem acionamento em andamento
+    }
+  }
+
+  private beginRun(bombId: number, elapsedMs: number): void {
+    this.endRun();
+    this.runBombId = bombId;
+    this.runStartedAt = Date.now() - elapsedMs;
+    this.runElapsedMs = elapsedMs;
+    this.lastKeepAlive = Date.now();
+    this.runTimer = setInterval(() => this.tickRun(), 200);
+  }
+
+  private endRun(): void {
+    if (this.runTimer) clearInterval(this.runTimer);
+    this.runTimer = null;
+    this.runBombId = null;
+    this.keepAliveInFlight = false;
+  }
+
+  private tickRun(): void {
+    this.runElapsedMs = Date.now() - this.runStartedAt;
+    if (this.runBombId === null || this.keepAliveInFlight || Date.now() - this.lastKeepAlive < RUN_KEEPALIVE_MS) return;
+    const bombId = this.runBombId;
+    this.lastKeepAlive = Date.now();
+    this.keepAliveInFlight = true;
+    this.doser.runPump(bombId, 'manter').subscribe({
+      next: () => (this.keepAliveInFlight = false),
+      error: (error) => {
+        if (this.runBombId !== bombId) return;
+        const bomb = this.bombs.find((item) => item.id === bombId);
+        const ml = this.runMl;
+        this.endRun();
+        this.errorMessage =
+          error instanceof HttpErrorResponse && error.status === 409
+            ? `${this.bombName(bomb)} desligou sozinha (~${this.num(ml)} ml): passou de 2 min ou ficou 4 s sem sinal do app.`
+            : 'Conexão com o ESP32 perdida. A bomba desliga sozinha em até 4 s sem sinal do app.';
+      },
+    });
   }
 
   private async dispense(mode: Mode): Promise<void> {

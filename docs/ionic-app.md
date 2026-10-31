@@ -183,6 +183,11 @@ interface BombForm extends BombConfig {
 **Acionamento manual:** `POST /dose` com `origem: "Manual"`, botão mostra a duração estimada; doses acima de
 10 ml pedem confirmação. O firmware também usa "Manual" quando a origem não vem no pedido.
 
+**Ligar até eu desligar:** `POST /run` com `acao: "ligar"`, depois `"manter"` a cada 1 s enquanto o
+botão vermelho mostra tempo ligado e volume estimado (`ms / (700 × coef)`). Desligar, sair da tela ou um
+409 em `manter` (o firmware parou: 2 min ou 4 s sem sinal) encerra. Ao entrar na tela, `GET /status` traz
+`run` e retoma o contador se a bomba ainda estiver ligada. O log registra "Manual contínuo".
+
 ### 4. LogsPage — Histórico
 
 **Arquivos:** `logs/`
@@ -267,6 +272,7 @@ Reagenda ao abrir Home/Ajuste, salvar Configuração/Produtos e aplicar ajustes.
 | `saveConfig(bombs)` | `POST /config` | Salva config. Body: JSON string. Header: `Content-Type: text/plain`. |
 | `setTime(date)` | `POST /time` | Sincroniza RTC. Body: `{ "time": "DD/MM/AAAA HH:mm:ss" }`. |
 | `testDose(bombId, dosagem, origem?)` | `POST /dose` | Dosagem manual. Body: `{ "bomb": id, "dosagem": ml, "origem": "..." }`. |
+| `runPump(bombId, acao)` | `POST /run` | Liga até desligar. Body: `{ "bomb": id, "acao": "ligar" \| "manter" \| "desligar" }`. |
 | `getLogs()` | `GET /logs` | Histórico. Aceita array direto ou `{ logs: [...] }`. |
 | `clearLogs()` | `DELETE /logs` | Apaga todos os logs. |
 
@@ -338,7 +344,10 @@ interface WifiBindingPlugin {
 
 **Arquivo:** `android/app/src/main/java/com/aquabalancepro/app/WifiBindingPlugin.java`
 
-Registrado no `MainActivity` como `WifiBinding`.
+Registrado no `MainActivity` como `WifiBinding`, **antes** de `super.onCreate()` (depois disso a ponte do
+Capacitor já foi criada e o plugin fica "not implemented on android"). Sem o bind, o Android manda o tráfego
+pelos dados móveis porque a rede do ESP32 não tem internet, e as requisições a `192.168.4.1` ficam sem
+resposta; o `DoserService` corta cada requisição em 10 s com uma mensagem de erro.
 
 | Método | Ação |
 |---|---|
@@ -454,4 +463,19 @@ Home → /analytics → GET /config + GET /logs
 | `.postcssrc.json` | Plugin PostCSS do Tailwind |
 | `tsconfig.json` | Paths, strict mode, decorators |
 | `.eslintrc.json` | Regras Angular + TypeScript |
-| `package.json` | Scripts: `serve`, `build`, `test`, `lint`, `cap:sync` |
+| `package.json` | Scripts: `start`, `build`, `test`, `lint`, `debug:phone` |
+
+## Gerar e depurar no Android
+
+Ferramentas: JDK 21 e Android SDK 36 (`platforms;android-36`, `build-tools;36.0.0`, `platform-tools`);
+`android/local.properties` aponta `sdk.dir` (com `/`, não `\`).
+
+```bash
+npx ng build && npx cap sync android
+cd android && ./gradlew assembleDebug        # JAVA_HOME = JDK 21
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+Com o celular no cabo (depuração USB) e o app aberto, `npm run debug:phone` conecta no WebView do app
+(mesmo protocolo do `chrome://inspect`) e mostra console com objetos completos, erros e requisições ao ESP32
+com status e tempo. Opções: `--seconds N`, `--reload` (pega a inicialização) e `--eval "expressão"`.
