@@ -49,7 +49,7 @@ export class DoseNotificationsService {
       const profile = data.pumps.find((pump) => pump.pumpId === bomb.id);
       const name = bomb.name || `Bomba ${bomb.id}`;
       const label =
-        profile && profile.identidade !== 'Nenhuma' ? `${IDENTITIES[profile.identidade].label} (${name})` : name;
+        profile && profile.identidade !== 'Nenhuma' ? `${IDENTITIES[profile.identidade].short} (${name})` : name;
 
       bomb.schedules.forEach((schedule, scheduleIndex) => {
         if (!isScheduleActive(schedule)) return;

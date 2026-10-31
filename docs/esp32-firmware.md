@@ -280,7 +280,7 @@ Comanda dosagem manual imediata.
 |---|---|---|
 | `bomb` | int | Índice da bomba (1–3) |
 | `dosagem` | float | Volume em ml |
-| `origem` | string | Identificador da origem (ex: "Teste", "Calibracao", "Programado") |
+| `origem` | string | Identificador da origem (ex: "Manual", "Calibracao", "Programado"); padrão "Manual" |
 
 **Respostas:**
 
@@ -426,7 +426,7 @@ struct PumpJob {
   int bombId;           // 0-2
   unsigned long duration;  // duração em ms
   unsigned long startTime; // timestamp de início (preenchido ao iniciar)
-  String origem;        // "Programado", "Teste", "Calibracao"
+  String origem;        // "Programado", "Manual", "Calibracao"
   bool active;          // true se está executando agora
 };
 
@@ -671,7 +671,7 @@ curl http://192.168.4.1/status
 # Dose manual
 curl -X POST http://192.168.4.1/dose \
   -H "Content-Type: application/json" \
-  -d '{"bomb": 1, "dosagem": 5.0, "origem": "Teste"}'
+  -d '{"bomb": 1, "dosagem": 5.0, "origem": "Manual"}'
 
 # Sincronizar hora
 curl -X POST http://192.168.4.1/time \

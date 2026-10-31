@@ -12,6 +12,13 @@ export interface Suggestion {
   mensagem: string;
   correcao?: RuleFix;
   descricaoCorrecao?: string;
+  /** Horários envolvidos, para a tela de Configuração marcar cada linha. */
+  horarios?: ScheduleRef[];
+}
+
+export interface ScheduleRef {
+  pumpId: number;
+  scheduleIndex: number;
 }
 
 export interface RulesContext {
@@ -101,7 +108,7 @@ function spacingRule(ctx: RulesContext, pumps: PumpEntry[]): Suggestion[] {
       const own = activeSchedules(mover.bomb);
       for (const { schedule, index } of own) {
         for (const other of others) {
-          for (const { schedule: otherSchedule } of activeSchedules(other.bomb)) {
+          for (const { schedule: otherSchedule, index: otherIndex } of activeSchedules(other.bomb)) {
             if (!sharesDay(schedule, otherSchedule)) continue;
             const diff = circularDiff(minutesOf(schedule), minutesOf(otherSchedule));
             if (diff >= interval) continue;
@@ -120,7 +127,11 @@ function spacingRule(ctx: RulesContext, pumps: PumpEntry[]): Suggestion[] {
               nivel: 'aviso',
               mensagem:
                 `${mover.title} às ${formatHour(schedule)} e ${other.title} às ${formatHour(otherSchedule)} ficam a ${diff} min. ` +
-                `Doses próximas de ${IDENTITIES[first].label} e ${IDENTITIES[second].label} podem precipitar; mantenha pelo menos ${interval} min.`,
+                `Doses próximas de ${IDENTITIES[first].short} e ${IDENTITIES[second].short} podem precipitar; mantenha pelo menos ${interval} min.`,
+              horarios: [
+                { pumpId: mover.bomb.id, scheduleIndex: index },
+                { pumpId: other.bomb.id, scheduleIndex: otherIndex },
+              ],
               ...(free !== undefined
                 ? {
                     correcao: {
@@ -159,6 +170,7 @@ function potencyRules(ctx: RulesContext, pumps: PumpEntry[]): Suggestion[] {
             id: `dose-concentrada-${pump.bomb.id}-${index}`,
             nivel: 'aviso',
             mensagem: `A dose de ${fmt(schedule.dosagem)} ml de ${pump.title} às ${formatHour(schedule)} sobe ~${fmt(rise, 2)} dKH de uma vez (limite ${fmt(limit)}). Divida em mais horários.`,
+            horarios: [{ pumpId: pump.bomb.id, scheduleIndex: index }],
           });
         }
       }
@@ -253,7 +265,7 @@ function profileRule(ctx: RulesContext, pumps: PumpEntry[]): Suggestion[] {
     if (!activeSchedules(pump.bomb).length) continue;
     const info = IDENTITIES[pump.profile.identidade];
     if (pump.profile.identidade === 'Nenhuma') {
-      result.push({ id: `perfil-${pump.bomb.id}`, nivel: 'info', mensagem: `Defina o tipo de produto de ${pump.title} em Produtos.` });
+      result.push({ id: `perfil-${pump.bomb.id}`, nivel: 'info', mensagem: `Defina o tipo de produto de ${pump.title} na Configuração ou em Produtos.` });
     } else if (info.measured && (!pump.profile.potencia || ctx.data.tank.volumeLitros <= 0)) {
       result.push({
         id: `potencia-${pump.bomb.id}`,

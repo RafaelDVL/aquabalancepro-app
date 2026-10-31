@@ -26,6 +26,11 @@
           Atualizar
         </button>
       </div>
+      <button type="button" *ngIf="bombs.length" (click)="suggestTimes()" [disabled]="loading"
+        class="mt-4 w-full h-11 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-text-main flex items-center justify-center gap-2 hover:border-neon-cyan/50 transition disabled:opacity-50">
+        <ion-icon name="sparkles-outline" class="text-neon-cyan text-base"></ion-icon>
+        Horário automático
+      </button>
     </section>
 
     <p class="px-5 text-sm text-red-400" *ngIf="errorMessage">{{ errorMessage }}</p>
@@ -43,10 +48,12 @@
                     [style.borderColor]="bomb.color" [style.color]="bomb.color" [style.backgroundColor]="bomb.colorBg">
                     {{ bomb.name || ('Bomba ' + bomb.id) }}
                   </span>
-                  <span *ngIf="identities[bomb.id]"
+                  <span *ngIf="showIdentityBadge(bomb)"
                     class="px-2 py-0.5 rounded-md text-[10px] uppercase font-bold tracking-wider border border-white/15 text-white/70">
-                    {{ identities[bomb.id] }}
+                    {{ identityLabel(bomb) }}
                   </span>
+                  <ion-icon *ngIf="hasWarnings(bomb)" name="warning-outline" class="text-amber-300 text-base"
+                    aria-label="Horário com aviso"></ion-icon>
                 </div>
                 <span class="text-xs" [ngClass]="isBombOn(bomb) ? 'text-text-muted' : 'text-red-300/80'">{{ summary(bomb) }}</span>
               </div>
@@ -88,6 +95,17 @@
                 </div>
               </div>
             </div>
+
+            <!-- Tipo de produto -->
+            <label *ngIf="dosingData" class="block space-y-1">
+              <span class="text-xs text-text-muted">Tipo de produto</span>
+              <select [(ngModel)]="bomb.identidade" class="field">
+                <optgroup *ngFor="let group of identityGroups" [label]="group.group">
+                  <option *ngFor="let identity of group.items" [ngValue]="identity.value">{{ identity.label }}</option>
+                </optgroup>
+              </select>
+              <span class="block text-[11px] text-text-muted">Usado para checar horários (ex.: KH longe do Cálcio). Potência e produto ficam em Produtos.</span>
+            </label>
 
             <!-- Estoque -->
             <div class="space-y-1">
@@ -132,6 +150,8 @@
                       {{ schedule.status ? daysLabel(schedule) : 'Desativado' }}
                     </span>
                   </div>
+                  <ion-icon *ngIf="scheduleWarnings(bomb, i).length" name="warning-outline"
+                    class="text-amber-300 text-lg shrink-0" aria-label="Horário com aviso"></ion-icon>
                   <ion-toggle [checked]="schedule.status" (click)="$event.stopPropagation()"
                     (ionChange)="setScheduleStatus(schedule, $event.detail.checked)"
                     [attr.aria-label]="'Ativar horário ' + (i + 1)"></ion-toggle>
@@ -140,6 +160,15 @@
 
                 <!-- Editor do horário -->
                 <div *ngIf="bomb.editingIndex === i" class="px-3 pb-4 pt-1 space-y-4 border-t border-white/5">
+                  <div *ngFor="let warning of scheduleWarnings(bomb, i)"
+                    class="mt-3 rounded-lg border border-amber-400/40 bg-amber-400/10 p-3 space-y-2">
+                    <p class="text-xs text-amber-50">{{ warning.mensagem }}</p>
+                    <button *ngIf="warning.correcao?.tipo === 'mover-horario'" type="button" (click)="applyFix(warning)"
+                      class="px-3 py-1.5 rounded-md border border-amber-300/60 text-amber-200 text-xs font-semibold hover:bg-amber-300/10">
+                      {{ warning.descricaoCorrecao }}
+                    </button>
+                  </div>
+
                   <label class="block space-y-1">
                     <span class="text-xs text-text-muted">Horário</span>
                     <div
@@ -203,10 +232,16 @@
     </ion-accordion-group>
 
     <div class="px-5" [ngClass]="isDirty ? 'pb-28' : 'pb-12'">
-      <div *ngIf="ruleWarnings.length" class="mb-4 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-4 space-y-2">
+      <div *ngIf="suggestions.length" class="mb-4 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-4 space-y-3">
         <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-200">Sugestões para esta agenda</p>
-        <p *ngFor="let warning of ruleWarnings" class="text-sm text-amber-50">{{ warning.mensagem }}</p>
-        <p class="text-[11px] text-amber-100/60">As correções automáticas ficam na tela Ajuste de Dosagem.</p>
+        <div *ngFor="let warning of suggestions" class="space-y-1.5">
+          <p class="text-sm text-amber-50">{{ warning.mensagem }}</p>
+          <button *ngIf="warning.correcao?.tipo === 'mover-horario'" type="button" (click)="applyFix(warning)"
+            class="px-3 py-1.5 rounded-md border border-amber-300/60 text-amber-200 text-xs font-semibold hover:bg-amber-300/10">
+            {{ warning.descricaoCorrecao }}
+          </button>
+        </div>
+        <p class="text-[11px] text-amber-100/60">As correções mudam só esta tela; toque em Salvar para enviar ao ESP32.</p>
       </div>
 
       <p *ngIf="!isDirty && bombs.length" class="text-center text-xs text-text-muted">Tudo salvo no ESP32.</p>

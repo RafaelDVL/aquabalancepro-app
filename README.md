@@ -35,7 +35,7 @@ graph TD
 │   ├── app/
 │   │   ├── home/           # Dashboard principal
 │   │   ├── configuracao/   # Config de bombas e schedules
-│   │   ├── calibracao/     # Calibração e teste manual
+│   │   ├── calibracao/     # Calibração guiada e dose manual
 │   │   ├── logs/           # Histórico de dosagens
 │   │   ├── analytics/      # Gráficos de timeline
 │   │   └── services/       # DoserService + WifiBindingService
@@ -71,7 +71,7 @@ O ESP32 expõe um servidor HTTP na porta `80` no IP `192.168.4.1`. O app se comu
 1. **Conectar** — Celular conecta ao Wi-Fi `AquaBalancePro` (AP do ESP32)
 2. **Status** — HomePage exibe status em tempo real (polling a cada 15s)
 3. **Configurar** — Sincroniza hora, nomeia bombas, define schedules (3 por bomba)
-4. **Calibrar** — Envia dose de teste, informa volume real, recalibra coeficiente
+4. **Calibrar** — Dose de teste com cronômetro, informa o volume medido, recalcula o coeficiente e confere
 5. **Monitorar** — Logs e gráficos de dosagem programada vs executada
 
 ## Primeiros Passos

@@ -1,9 +1,9 @@
 <ion-header>
   <ion-toolbar class="bg-transparent text-neon-cyan" style="--background: transparent;">
     <ion-buttons slot="start">
-      <ion-back-button defaultHref="/configuracao" color="primary" class="text-neon-cyan"></ion-back-button>
+      <ion-back-button defaultHref="/home" color="primary" class="text-neon-cyan"></ion-back-button>
     </ion-buttons>
-    <ion-title class="font-bold">Calibracao</ion-title>
+    <ion-title class="font-bold">Calibração</ion-title>
   </ion-toolbar>
 </ion-header>
 
@@ -14,78 +14,188 @@
   </div>
 
   <div class="relative z-10 px-5 pt-6 pb-10 space-y-5">
-    <div
-      class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl space-y-5 relative overflow-hidden group">
-      <div
-        class="absolute -top-10 -right-10 w-28 h-28 bg-neon-cyan/20 rounded-full blur-3xl group-hover:bg-neon-cyan/30 transition-all duration-700">
-      </div>
+    <p class="text-sm text-red-400" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+    <!-- Calibração guiada -->
+    <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl space-y-4 relative overflow-hidden">
+      <div class="absolute -top-10 -right-10 w-28 h-28 bg-neon-cyan/20 rounded-full blur-3xl pointer-events-none"></div>
       <div class="relative z-10 space-y-4">
-        <div>
-          <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Calibração das Bombas</p>
+        <div class="flex items-baseline justify-between">
+          <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Calibração das bombas</p>
+          <span *ngIf="step !== 'setup'" class="text-[11px] text-white/50">{{ bombName(selectedBomb) }}</span>
         </div>
 
-        <div class="space-y-2">
-          <label class="text-sm text-white/70">Bomba</label>
-          <div
-            class="bg-white/5 rounded-xl px-4 py-2 border border-white/10 focus-within:border-neon-cyan focus-within:ring-1 focus-within:ring-neon-cyan transition-all">
-            <ion-select [(ngModel)]="selectedBombId" class="bg-transparent text-white"
-              style="--placeholder-color: #6DA5C0; --color: #E0E0E0;">
-              <ion-select-option *ngFor="let bomb of bombs" [value]="bomb.id">
-                {{ bomb.name || ('Bomba ' + bomb.id) }}
-              </ion-select-option>
-            </ion-select>
+        <!-- 1. Escolher bomba e volume -->
+        <ng-container *ngIf="step === 'setup'">
+          <div class="space-y-2">
+            <button type="button" *ngFor="let bomb of bombs" (click)="selectBomb(bomb.id)"
+              class="w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition"
+              [ngClass]="bomb.id === selectedBombId ? 'bg-white/10' : 'border-white/10 bg-white/[0.03] hover:border-white/25'"
+              [style.borderColor]="bomb.id === selectedBombId ? color(bomb.id) : ''">
+              <span class="h-2.5 w-2.5 rounded-full shrink-0" [style.backgroundColor]="color(bomb.id)"></span>
+              <span class="flex-1 min-w-0 text-sm font-semibold text-white truncate">{{ bombName(bomb) }}</span>
+              <span class="text-[11px] text-white/60 text-right leading-tight">
+                ~{{ num(flow(bomb.calibrCoef), 0) }} ml/min<br />
+                <span class="text-white/40">coef. {{ coef(bomb.calibrCoef) }}</span>
+              </span>
+            </button>
+            <p *ngIf="!bombs.length" class="text-sm text-white/60">Conecte ao ESP32 para listar as bombas.</p>
           </div>
-        </div>
 
-        <div class="grid grid-cols-2 gap-3 text-sm text-white/80">
-          <div class="bg-white/5 border border-white/5 rounded-xl p-3 flex flex-col justify-between gap-2 col-span-2">
-            <span class="text-white/60">Dose de teste (ml)</span>
-            <div class="flex items-center gap-3 w-full">
-              <button type="button" (click)="decreaseCalibrationDose()"
-                class="h-10 w-10 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white hover:border-cyan-400/40 hover:bg-white/10 active:scale-90 transition-all font-bold text-lg">
-                −
-              </button>
-              <input type="number" [(ngModel)]="calibrationDose" step="1" min="1"
-                class="flex-1 h-10 bg-white/5 border border-white/10 rounded-lg px-2 text-white text-center font-semibold focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-all placeholder-white/30"
-                placeholder="10" />
-              <button type="button" (click)="increaseCalibrationDose()"
-                class="h-10 w-10 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white hover:border-cyan-400/40 hover:bg-white/10 active:scale-90 transition-all font-bold text-lg">
-                +
+          <div class="space-y-2">
+            <p class="text-sm text-white/70">Volume do teste</p>
+            <div class="grid grid-cols-3 gap-2">
+              <button type="button" *ngFor="let option of calibrationOptions" (click)="calibrationDose = option"
+                class="h-11 rounded-xl border text-sm font-bold transition"
+                [ngClass]="calibrationDose === option ? 'border-neon-cyan text-neon-cyan bg-neon-cyan/10' : 'border-white/10 text-white/70 hover:border-white/30'">
+                {{ option }} ml
               </button>
             </div>
+            <p class="text-[11px] text-white/50">Quanto maior o volume, menor o efeito do erro de leitura. 20 ml é o mais preciso.</p>
           </div>
-          <div class="bg-white/5 border border-white/5 rounded-xl p-3 flex items-center justify-between"
-            *ngIf="selectedBomb">
-            <span class="text-white/60">Coeficiente</span>
-            <span class="font-semibold text-neon-cyan">{{ selectedBomb.calibrCoef }}</span>
-          </div>
-        </div>
 
-        <ion-button fill="outline" expand="block"
-          class="h-12 text-sm font-bold tracking-wider shadow-[0_0_15px_rgba(34,211,238,0.1)] transition-all hover:shadow-[0_0_25px_rgba(34,211,238,0.3)]"
-          style="
-    --border-color: #22d3ee;
-    --color: #22d3ee;
-    --border-radius: 12px;
-    --border-width: 1.5px;
-    --background-hover: rgba(34, 211, 238, 0.08);
-    --ripple-color: #22d3ee; /* <--- A MÁGICA ACONTECE AQUI */
-    --ripple-opacity: 0.2;
-  " (click)="startCalibration()" [disabled]="pendingCalibration || !bombs.length">
-          <ion-icon slot="start" name="color-wand-outline" class="text-xl"></ion-icon>
-          Iniciar Calibração
-        </ion-button>
+          <div class="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-white/70 space-y-1">
+            <p>Ponha a ponta da mangueira numa proveta ou seringa graduada.</p>
+            <p class="text-white/50">Sem proveta? Use um copo sobre uma balança de cozinha: 1 g ≈ 1 ml.</p>
+          </div>
+
+          <ion-button fill="outline" expand="block"
+            class="h-12 text-sm font-bold tracking-wider shadow-[0_0_15px_rgba(34,211,238,0.1)]"
+            style="--border-color: #22d3ee; --color: #22d3ee; --border-radius: 12px; --border-width: 1.5px; --background-hover: rgba(34, 211, 238, 0.08); --ripple-color: #22d3ee; --ripple-opacity: 0.2;"
+            (click)="startCalibration()" [disabled]="sending || !selectedBomb">
+            <ion-icon slot="start" name="color-wand-outline" class="text-xl"></ion-icon>
+            {{ sending ? 'Enviando...' : 'Dosar ' + calibrationDose + ' ml' }}
+            <span *ngIf="selectedBomb && !sending" class="ml-1 font-normal opacity-70">(~{{ num(durationMs(calibrationDose, selectedBomb.calibrCoef) / 1000, 0) }} s)</span>
+          </ion-button>
+        </ng-container>
+
+        <!-- 2. Dosando -->
+        <ng-container *ngIf="step === 'running'">
+          <div class="text-center space-y-3 py-2">
+            <ion-icon name="timer-outline" class="text-4xl text-neon-cyan"></ion-icon>
+            <p class="text-base font-semibold text-white">
+              {{ mode === 'conferir' ? 'Conferindo' : 'Dosando' }} {{ calibrationDose }} ml…
+            </p>
+            <p class="text-4xl font-bold tabular-nums text-neon-cyan">{{ remainingSeconds }} s</p>
+            <div class="h-2 rounded-full bg-white/10 overflow-hidden">
+              <div class="h-full bg-neon-cyan transition-[width] duration-200" [style.width.%]="progress * 100"></div>
+            </div>
+            <p class="text-[11px] text-white/50">Tempo estimado. Se outra bomba estiver na fila, espere ela terminar.</p>
+          </div>
+          <button type="button" (click)="finishWaiting()"
+            class="w-full h-11 rounded-xl border border-white/15 text-sm font-semibold text-white/80 hover:border-white/30">
+            A bomba já parou
+          </button>
+        </ng-container>
+
+        <!-- 3. Medir -->
+        <ng-container *ngIf="step === 'measure'">
+          <div class="space-y-2">
+            <p class="text-base font-semibold text-white">Quanto saiu?</p>
+            <p class="text-xs text-white/60">Pedido: {{ calibrationDose }} ml. Leia na proveta ou na balança.</p>
+            <div class="flex items-center gap-2">
+              <input type="text" inputmode="decimal" [(ngModel)]="measuredInput" (keyup.enter)="submitMeasure()"
+                class="flex-1 h-14 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-center text-2xl font-semibold outline-none focus:border-neon-cyan"
+                [placeholder]="num(calibrationDose)" aria-label="Volume medido em ml" />
+              <span class="text-white/60">ml</span>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" (click)="reset()"
+              class="h-11 rounded-xl border border-white/15 text-sm font-semibold text-white/70">Cancelar</button>
+            <button type="button" (click)="submitMeasure()"
+              class="h-11 rounded-xl bg-neon-cyan text-ocean-dark text-sm font-bold">
+              {{ mode === 'conferir' ? 'Conferir' : 'Calcular' }}
+            </button>
+          </div>
+        </ng-container>
+
+        <!-- 4. Resultado -->
+        <ng-container *ngIf="step === 'result' && result">
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div class="rounded-xl bg-black/20 border border-white/5 p-2">
+              <p class="text-[10px] uppercase tracking-wider text-white/50">Pedido</p>
+              <p class="text-base font-bold text-white">{{ num(result.pedido) }} ml</p>
+            </div>
+            <div class="rounded-xl bg-black/20 border border-white/5 p-2">
+              <p class="text-[10px] uppercase tracking-wider text-white/50">Medido</p>
+              <p class="text-base font-bold text-white">{{ num(result.medido, 2) }} ml</p>
+            </div>
+            <div class="rounded-xl bg-black/20 border border-white/5 p-2">
+              <p class="text-[10px] uppercase tracking-wider text-white/50">Erro</p>
+              <p class="text-base font-bold" [ngClass]="result.medido > result.pedido ? 'text-amber-300' : 'text-sky-300'">
+                {{ percent((result.medido - result.pedido) / result.pedido) }}
+              </p>
+            </div>
+          </div>
+          <p class="text-sm text-white/80">
+            {{ deviationText(result.pedido, result.medido) }}
+          </p>
+          <div class="rounded-xl border border-white/10 bg-white/[0.03] divide-y divide-white/5 text-sm">
+            <div class="flex items-center justify-between px-3 py-2">
+              <span class="text-white/60">Coeficiente</span>
+              <span class="font-semibold text-white">{{ coef(result.antes) }} → <span class="text-neon-cyan">{{ coef(result.depois) }}</span></span>
+            </div>
+            <div class="flex items-center justify-between px-3 py-2">
+              <span class="text-white/60">Vazão</span>
+              <span class="font-semibold text-white">{{ num(flow(result.antes), 0) }} → <span class="text-neon-cyan">{{ num(flow(result.depois), 0) }}</span> ml/min</span>
+            </div>
+          </div>
+
+          <div *ngIf="!result.salvo" class="grid grid-cols-2 gap-2">
+            <button type="button" (click)="reset()"
+              class="h-11 rounded-xl border border-white/15 text-sm font-semibold text-white/70">Descartar</button>
+            <button type="button" (click)="saveCalibration()" [disabled]="saving"
+              class="h-11 rounded-xl bg-neon-cyan text-ocean-dark text-sm font-bold disabled:opacity-60">
+              {{ saving ? 'Salvando...' : 'Salvar' }}
+            </button>
+          </div>
+          <ng-container *ngIf="result.salvo">
+            <p class="flex items-center gap-2 text-sm text-green-300">
+              <ion-icon name="checkmark-circle-outline" class="text-lg"></ion-icon>Salvo no ESP32.
+            </p>
+            <p class="text-xs text-white/60">Esvazie a proveta e confira: a bomba vai dosar {{ calibrationDose }} ml de novo já com o coeficiente novo.</p>
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" (click)="reset()"
+                class="h-11 rounded-xl border border-white/15 text-sm font-semibold text-white/70">Concluir</button>
+              <button type="button" (click)="startVerify()" [disabled]="sending"
+                class="h-11 rounded-xl border border-neon-cyan text-neon-cyan text-sm font-bold disabled:opacity-60">
+                {{ sending ? 'Enviando...' : 'Conferir' }}
+              </button>
+            </div>
+          </ng-container>
+        </ng-container>
+
+        <!-- 5. Conferência -->
+        <ng-container *ngIf="step === 'verified' && verify">
+          <div class="rounded-xl border p-3 space-y-1"
+            [ngClass]="verifyOk ? 'border-green-400/40 bg-green-400/10' : 'border-amber-400/40 bg-amber-400/10'">
+            <p class="text-sm font-semibold" [ngClass]="verifyOk ? 'text-green-200' : 'text-amber-100'">
+              {{ verifyOk ? 'Bomba calibrada' : 'Ainda fora do esperado' }}
+            </p>
+            <p class="text-xs text-white/80">
+              {{ num(verify.medido, 2) }} ml medidos para {{ num(verify.pedido) }} ml ({{ percent(verify.erro) }}).
+              <ng-container *ngIf="!verifyOk">Dá para ajustar de novo a partir desta medição.</ng-container>
+            </p>
+          </div>
+          <div class="grid gap-2" [ngClass]="verifyOk ? 'grid-cols-1' : 'grid-cols-2'">
+            <button type="button" (click)="reset()"
+              class="h-11 rounded-xl border border-white/15 text-sm font-semibold text-white/70">Concluir</button>
+            <button *ngIf="!verifyOk" type="button" (click)="recalibrateFromVerify()"
+              class="h-11 rounded-xl bg-neon-cyan text-ocean-dark text-sm font-bold">Ajustar de novo</button>
+          </div>
+        </ng-container>
       </div>
     </div>
 
+    <!-- Acionamento manual -->
     <div
-      class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl space-y-5 relative overflow-hidden group">
-      <div
-        class="absolute -top-8 -left-12 w-32 h-32 bg-purple-400/15 rounded-full blur-3xl group-hover:bg-purple-400/25 transition-all duration-700">
-      </div>
+      class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl space-y-5 relative overflow-hidden">
+      <div class="absolute -top-8 -left-12 w-32 h-32 bg-purple-400/15 rounded-full blur-3xl pointer-events-none"></div>
       <div class="relative z-10 space-y-4">
         <div>
-          <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Acionamento Manual</p>
+          <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Acionamento manual</p>
+          <p class="text-xs text-white/50 mt-1">Dose avulsa, registrada como “Manual” nos logs.</p>
         </div>
 
         <div class="space-y-2">
@@ -95,7 +205,7 @@
             <ion-select [(ngModel)]="quickTestBombId" class="bg-transparent text-white"
               style="--placeholder-color: #6DA5C0; --color: #E0E0E0;">
               <ion-select-option *ngFor="let bomb of bombs" [value]="bomb.id">
-                {{ bomb.name || ('Bomba ' + bomb.id) }}
+                {{ bombName(bomb) }}
               </ion-select-option>
             </ion-select>
           </div>
@@ -105,14 +215,14 @@
           <div class="space-y-2">
             <label class="text-sm text-white/70">Dosagem (ml)</label>
             <div class="flex items-center gap-3">
-              <button type="button" (click)="decreaseQuickDose()"
+              <button type="button" (click)="decreaseQuickDose()" aria-label="Diminuir dose"
                 class="h-12 w-12 flex items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white hover:border-neon-cyan/40 hover:bg-white/10 active:scale-90 transition-all font-bold text-lg">
                 −
               </button>
               <input type="number" [(ngModel)]="quickTestDose" step="0.1" min="0"
                 class="flex-1 h-12 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-center font-semibold focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan transition-all placeholder-white/30"
                 placeholder="0.0" />
-              <button type="button" (click)="increaseQuickDose()"
+              <button type="button" (click)="increaseQuickDose()" aria-label="Aumentar dose"
                 class="h-12 w-12 flex items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white hover:border-neon-cyan/40 hover:bg-white/10 active:scale-90 transition-all font-bold text-lg">
                 +
               </button>
@@ -123,7 +233,8 @@
             <p class="text-xs text-white/50 uppercase tracking-widest font-semibold">Atalhos rápidos</p>
             <div class="grid grid-cols-5 gap-2">
               <button *ngFor="let dose of quickDoseOptions" type="button" (click)="quickTestDose = dose"
-                class="h-10 rounded-xl border border-white/10 bg-white/5 text-white font-semibold transition-all duration-200 text-sm hover:border-neon-cyan/40 hover:bg-white/10">
+                class="h-10 rounded-xl border text-white font-semibold transition-all duration-200 text-sm hover:border-neon-cyan/40 hover:bg-white/10"
+                [ngClass]="quickTestDose === dose ? 'border-purple-400 bg-purple-400/15' : 'border-white/10 bg-white/5'">
                 {{ dose }}
               </button>
             </div>
@@ -131,25 +242,16 @@
         </div>
 
         <ion-button fill="outline" expand="block"
-          class="h-12 text-sm font-bold tracking-wider shadow-[0_0_15px_rgba(168,85,247,0.1)] transition-all hover:shadow-[0_0_25px_rgba(168,85,247,0.3)]"
-          style="
-          --border-color: #a855f7;
-          --color: #d8b4fe;
-          --border-radius: 12px;
-          --border-width: 1.5px;
-          --background-hover: rgba(168, 85, 247, 0.08);
-          --ripple-color: #a855f7; /* <--- A MÁGICA ACONTECE AQUI */
-          --ripple-opacity: 0.2;
-        " (click)="runQuickTest()" [disabled]="!bombs.length">
+          class="h-12 text-sm font-bold tracking-wider shadow-[0_0_15px_rgba(168,85,247,0.1)]"
+          style="--border-color: #a855f7; --color: #d8b4fe; --border-radius: 12px; --border-width: 1.5px; --background-hover: rgba(168, 85, 247, 0.08); --ripple-color: #a855f7; --ripple-opacity: 0.2;"
+          (click)="runQuickTest()" [disabled]="!bombs.length">
           <ion-icon slot="start" name="water-outline" class="text-xl"></ion-icon>
-          Liberar Dose
+          Liberar {{ num(quickTestDose) }} ml
+          <span class="ml-1 font-normal opacity-70">(~{{ quickDuration() }} s)</span>
         </ion-button>
       </div>
     </div>
   </div>
-
-  <ion-alert [isOpen]="showDosePrompt" header="Quantidade dosada" message="Digite o volume real medido (ml)."
-    [inputs]="alertInputs" [buttons]="alertButtons"></ion-alert>
 
   <ion-toast [isOpen]="toastOpen" [message]="toastMessage" duration="2000" (didDismiss)="toastOpen = false"></ion-toast>
 </ion-content>

@@ -16,7 +16,8 @@ import { BombConfig, DoserService } from '../services/doser.service';
 import {
   DosingData,
   IDENTITIES,
-  IDENTITY_ORDER,
+  IDENTITY_GROUPS,
+  hasPotencyUnit,
   MEASURED_PARAMS,
   MeasuredParam,
   PumpIdentity,
@@ -55,7 +56,7 @@ interface PumpForm {
   ],
 })
 export class ProdutosPage {
-  readonly identities = IDENTITY_ORDER.map((value) => ({ value, label: IDENTITIES[value].label }));
+  readonly identityGroups = IDENTITY_GROUPS;
   readonly params = MEASURED_PARAMS;
   readonly info = IDENTITIES;
   bombs: BombConfig[] = [];
@@ -109,7 +110,7 @@ export class ProdutosPage {
   }
 
   hasPotency(form: PumpForm): boolean {
-    return form.identidade !== 'Carbono' && form.identidade !== 'Outro' && form.identidade !== 'Nenhuma';
+    return hasPotencyUnit(form.identidade);
   }
 
   linkOptions(form: PumpForm): PumpForm[] {

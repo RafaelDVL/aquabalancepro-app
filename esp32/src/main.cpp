@@ -545,7 +545,7 @@ void handlePostDose(AsyncWebServerRequest *request)
 
   int bomba = doc["bomb"] | 0;
   float dosagem = doc["dosagem"] | 0.0f;
-  String origem = doc["origem"] | "Teste";
+  String origem = doc["origem"] | "Manual";
 
   if (bomba < 1 || bomba > BOMBA_COUNT || dosagem <= 0)
   {

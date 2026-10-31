@@ -128,13 +128,15 @@ Com firmware sem `/dosing`, as regras usam um perfil padrão (sem notificações
 
 **Estado local:**
 - `bombs: BombForm[]` — bombas com schedules e cores
-- `identities` — tipo do produto por bomba (de `GET /dosing`; vazio com firmware antigo)
+- `dosingData` — documento do `GET /dosing` (null com firmware antigo: o seletor de tipo some)
+- `suggestions` — regras de agenda recalculadas a cada alteração (cache pelo snapshot)
 - `savedSnapshot` / `isDirty` — detecta alterações não salvas
 
 **Modelo interno `BombForm`:**
 ```typescript
 interface BombForm extends BombConfig {
   editingIndex: number | null;  // Horário aberto para edição
+  identidade: PumpIdentity;     // Tipo de produto (KH, Cálcio, Iodo…)
   color: string;                // Cor hex personalizada
   colorBg: string;              // Cor com alpha para background
   schedules: (ScheduleConfig & { timeValue: string })[];
@@ -144,36 +146,42 @@ interface BombForm extends BombConfig {
 **Fluxo:**
 1. Ao entrar, carrega a configuração (`getConfig()`) e, se houver, o tipo de cada bomba (`getDosingData()`)
 2. Card fechado: nome, tipo, dose média/dia, próxima dose e quantidade de horários ativos
-3. Card aberto: nome + cor, **estoque** (ml, com botão "Reabasteci" que lembra o tamanho do frasco) e a lista
+3. Card aberto: nome + cor, **tipo de produto** (seletor agrupado: macro, micro, nutrientes, carbono e
+   alimentação, outros), **estoque** (ml, com botão "Reabasteci" que lembra o tamanho do frasco) e a lista
    dos 3 horários (hora, dose, dias, toggle). Toque numa linha abre o editor: horário, dose (passo 0,5 ml,
    0,5–15 ml, atalhos) e dias com atalhos Todos / Seg–Sex / Fim de semana
 4. Com alterações pendentes aparece uma barra fixa "Alterações não salvas" (Descartar / Salvar); sair da tela
    nesse estado pede confirmação (guard `canDeactivate` em `app.routes.ts`)
-5. Salvar envia `POST /config` (inclui `quantidadeEstoque`), mostra sugestões das regras e reagenda notificações
-6. Cores e tamanho do último frasco ficam no `localStorage`
+5. **Avisos ao vivo:** enquanto edita, as regras de agenda (`espaco-`, `dose-concentrada-`, `teto-diario-`,
+   `kh-noite-`) marcam o card e a linha do horário com um ícone amarelo; o editor e o card "Sugestões para esta
+   agenda" mostram a mensagem e o botão de correção ("Mover KH para 09:30"), que muda só o formulário
+6. **Horário automático** (`services/auto-schedule.ts`): espalha as doses de cada bomba igualmente no dia (passo
+   15 min), afasta os pares incompatíveis o máximo possível (até 4 h), evita duas bombas no mesmo horário
+   (≥ 30 min), prefere KH com as luzes apagadas se houver fotoperíodo e, entre opções iguais, a mais próxima da
+   agenda atual. Mostra antes → depois num alerta; Aplicar só muda o formulário (Salvar envia)
+7. Salvar envia `POST /config` (inclui `quantidadeEstoque`), `POST /dosing` se algum tipo mudou, e reagenda
+   notificações
+8. Cores e tamanho do último frasco ficam no `localStorage`
 
 ### 3. CalibracaoPage — Calibração
 
 **Arquivos:** `calibracao/`
 
-**Função:** Calibrar bombas e acionamento manual para teste.
+**Função:** Calibração guiada da vazão (`calibrCoef`) e dose manual avulsa.
 
-**Estado local:**
-- `bombs: BombConfig[]`
-- `isLoading, error`
+**Calibração guiada** (`step`: setup → running → measure → result → verified):
+1. **Escolher:** lista das bombas com vazão estimada (`60000 / (700 × coef)` ml/min) e coeficiente; volume de
+   5, 10 ou 20 ml (padrão 10; 20 é o mais preciso). Dica de proveta ou balança (1 g ≈ 1 ml)
+2. **Dosando:** `POST /dose` com `origem: "Calibracao"` e cronômetro com o tempo estimado
+   (`ml × 700 ms × coef` + 1,5 s). O campo do volume medido só aparece no fim (ou em "A bomba já parou")
+3. **Medir:** aceita vírgula ou ponto. Se o medido ficar mais de 40% longe do pedido, pede confirmação
+4. **Resultado:** pedido × medido, erro em %, coeficiente e vazão antes → depois.
+   `novoCoef = coefAtual × pedido / medido` (3 casas). Salvar envia `POST /config`
+5. **Conferir (opcional):** dosa de novo com o coeficiente salvo; dentro de ±3% mostra "Bomba calibrada",
+   senão oferece "Ajustar de novo" a partir dessa medição
 
-**Fluxo:**
-1. Carrega config atual via `doserService.getConfig()`
-2. **Teste de Calibração:**
-   - Usuário seleciona bomba e volume de teste (ml)
-   - Envia `POST /dose` com `origem: "Calibracao"`
-   - App exibe alert solicitando o volume REAL medido
-   - Calcula novo coeficiente: `novoCoef = (volumeReal / volumeSolicitado) * coefAtual`
-   - Salva configuração atualizada com o novo coeficiente
-3. **Acionamento Manual:**
-   - Usuário seleciona bomba e volume
-   - Envia `POST /dose` com `origem: "Teste"`
-   - Sem alteração de calibração
+**Acionamento manual:** `POST /dose` com `origem: "Manual"`, botão mostra a duração estimada; doses acima de
+10 ml pedem confirmação. O firmware também usa "Manual" quando a origem não vem no pedido.
 
 ### 4. LogsPage — Histórico
 
@@ -221,7 +229,8 @@ calcula a nova dose diária de cada bomba.
 
 ### 7. ProdutosPage — Produtos (`/produtos`)
 
-Volume e alvos do aquário, fotoperíodo, e por bomba: tipo (KH, Ca, Mg, K, Carbono, Outro), produto, potência do
+Volume e alvos do aquário, fotoperíodo, e por bomba: tipo (KH, Cálcio, Magnésio, Reef salt, Kalkwasser, Potássio, Iodo, Ferro, Estrôncio, elementos-traço,
+Nitrato, Fosfato, Carbono, Bactérias, Aminoácidos, Alimento líquido, Outro; também escolhido na Configuração), produto, potência do
 rótulo, vínculo com outra bomba, limites e regras. Tudo salvo no ESP32 via `GET/POST /dosing`.
 
 ### Notificações locais (`services/dose-notifications.service.ts`)
@@ -290,7 +299,7 @@ interface LogEntry {
   timestamp: string;       // "DD/MM/AAAA HH:mm:ss"
   bomba: string;
   dosagem: number;
-  origem: string;          // "Programado" | "Teste" | "Calibracao"
+  origem: string;          // "Programado" | "Manual" | "Calibracao" ("Teste" em logs antigos)
 }
 
 interface ApiStatusResponse {
@@ -389,6 +398,7 @@ Tema escuro fixo, definido em `theme/variables.scss`:
 | `home.page.spec.ts` | Deve criar a página (falha hoje: falta `HttpClient` no TestBed) |
 | `services/dosing-advisor.spec.ts` | Cálculo do ajuste e repartição em 0,5 ml |
 | `services/dosing-rules.spec.ts` | Regras e sugestões |
+| `services/auto-schedule.spec.ts` | Horário automático |
 | `services/dose-check.spec.ts` | Conferência de doses no log |
 | `services/today-summary.spec.ts` | Resumo do dia da Home |
 | `services/log-analytics.spec.ts` | Agrupamento, estatísticas, séries e CSV dos logs |
@@ -412,9 +422,9 @@ Home → sincroniza hora (POST /time) → navega /configuracao
 ### Calibrar Bomba
 ```
 Home → /calibracao → GET /config
-→ seleciona bomba + volume → POST /dose (origem: Calibracao)
-→ alert com volume real medido → recalcula calibrCoef
-→ POST /config com novo coeficiente
+→ seleciona bomba + volume (5/10/20 ml) → POST /dose (origem: Calibracao)
+→ cronômetro do tempo estimado → digita o volume medido → recalcula calibrCoef
+→ POST /config com novo coeficiente → (opcional) conferir com nova dose
 ```
 
 ### Visualizar Analytics

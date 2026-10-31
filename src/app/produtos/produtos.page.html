@@ -64,7 +64,9 @@
           <label class="space-y-1">
             <span class="text-[11px] text-white/50">Tipo</span>
             <select [(ngModel)]="form.identidade" class="field">
-              <option *ngFor="let identity of identities" [ngValue]="identity.value">{{ identity.label }}</option>
+              <optgroup *ngFor="let group of identityGroups" [label]="group.group">
+                <option *ngFor="let identity of group.items" [ngValue]="identity.value">{{ identity.label }}</option>
+              </optgroup>
             </select>
           </label>
           <label class="space-y-1">

@@ -3,7 +3,7 @@ import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { addIcons } from 'ionicons';
-import { power, cloudUploadOutline, colorPaletteOutline, chevronDown, chevronUp } from 'ionicons/icons';
+import { power, cloudUploadOutline, colorPaletteOutline, chevronDown, chevronUp, sparklesOutline, warningOutline } from 'ionicons/icons';
 import {
   AlertController,
   IonAccordion,
@@ -21,11 +21,19 @@ import {
 import { firstValueFrom } from 'rxjs';
 import { BombConfig, DoserService, ScheduleConfig } from '../services/doser.service';
 import { DoseNotificationsService } from '../services/dose-notifications.service';
+import { autoSchedule } from '../services/auto-schedule';
 import { dailyDose } from '../services/dosing-advisor';
 import { Suggestion, evaluateRules } from '../services/dosing-rules';
-import { IDENTITIES } from '../services/dosing.models';
+import {
+  DosingData,
+  IDENTITIES,
+  IDENTITY_GROUPS,
+  PumpIdentity,
+  nameMatchesIdentity,
+  normalizeDosingData,
+} from '../services/dosing.models';
 
-const SCHEDULE_RULES = ['espaco-', 'dose-concentrada-', 'teto-diario-', 'kh-noite-', 'estoque-'];
+const SCHEDULE_RULES = ['espaco-', 'dose-concentrada-', 'teto-diario-', 'kh-noite-'];
 
 
 interface ScheduleForm extends ScheduleConfig {
@@ -34,6 +42,7 @@ interface ScheduleForm extends ScheduleConfig {
 
 interface BombForm extends BombConfig {
   editingIndex: number | null;
+  identidade: PumpIdentity;
   schedules: ScheduleForm[];
   color: string;
   colorBg: string;
@@ -74,8 +83,9 @@ export class ConfiguracaoPage {
   toastMessage = '';
   toastOpen = false;
   openColorPickerId: number | null = null;
-  ruleWarnings: Suggestion[] = [];
-  identities: Record<number, string> = {};
+  /** Documento do Ajuste de Dosagem; null com firmware antigo (sem /dosing). */
+  dosingData: DosingData | null = null;
+  readonly identityGroups = IDENTITY_GROUPS;
   readonly doseMin = 0.5;
   readonly doseMax = 15;
   readonly doseStep = 0.5;
@@ -86,6 +96,7 @@ export class ConfiguracaoPage {
     { value: 'fimDeSemana', label: 'Fim de semana' },
   ];
   private savedSnapshot = '';
+  private suggestionsCache = { key: '', value: [] as Suggestion[] };
   private readonly colorStorageKey = 'abp-bomb-colors';
   private readonly refillStorageKey = 'abp-refill-ml';
   private readonly defaultColors: Record<number, string> = {
@@ -116,7 +127,7 @@ export class ConfiguracaoPage {
     private readonly notifications: DoseNotificationsService,
     private readonly alerts: AlertController,
   ) {
-    addIcons({ power, cloudUploadOutline, colorPaletteOutline, chevronDown, chevronUp });
+    addIcons({ power, cloudUploadOutline, colorPaletteOutline, chevronDown, chevronUp, sparklesOutline, warningOutline });
   }
 
   async ionViewWillEnter(): Promise<void> {
@@ -129,11 +140,13 @@ export class ConfiguracaoPage {
     try {
       const bombs = await firstValueFrom(this.doser.getConfig());
       const storedColors = this.getStoredColors();
+      // Tipo de produto (KH, Cálcio…) fica no /dosing; com firmware antigo o seletor só não aparece
+      this.dosingData = await firstValueFrom(this.doser.getDosingData(bombs.map((bomb) => bomb.id))).catch(() => null);
       this.bombs = bombs.map((bomb) => this.toFormBomb(bomb, storedColors));
-      void this.loadIdentities(bombs);
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : 'Falha ao carregar configuracoes.';
       const storedColors = this.getStoredColors();
+      this.dosingData = null;
       this.bombs = this.createFallbackBombs(storedColors);
     } finally {
       this.savedSnapshot = this.snapshot();
@@ -199,6 +212,84 @@ export class ConfiguracaoPage {
     if (!this.isBombOn(bomb)) return 'Sem horários ativos';
     const next = this.nextDose(bomb);
     return `${this.formatMl(this.dailyDoseOf(bomb))} ml/dia${next ? ` · próxima ${next}` : ''}`;
+  }
+
+  /** Sugestões da agenda em edição (KH perto do Ca, dose concentrada…), recalculadas a cada alteração. */
+  get suggestions(): Suggestion[] {
+    const key = this.snapshot();
+    if (key !== this.suggestionsCache.key) {
+      const bombs = this.bombs.map((bomb) => this.toConfigPayload(bomb));
+      this.suggestionsCache = {
+        key,
+        value: evaluateRules({ bombs, data: this.rulesData(), now: new Date() }).filter((suggestion) =>
+          SCHEDULE_RULES.some((prefix) => suggestion.id.startsWith(prefix)),
+        ),
+      };
+    }
+    return this.suggestionsCache.value;
+  }
+
+  scheduleWarnings(bomb: BombForm, index: number): Suggestion[] {
+    return this.suggestions.filter((suggestion) =>
+      suggestion.horarios?.some((ref) => ref.pumpId === bomb.id && ref.scheduleIndex === index),
+    );
+  }
+
+  hasWarnings(bomb: BombForm): boolean {
+    return this.suggestions.some((suggestion) => suggestion.horarios?.some((ref) => ref.pumpId === bomb.id));
+  }
+
+  identityLabel(bomb: BombForm): string {
+    return IDENTITIES[bomb.identidade].short;
+  }
+
+  showIdentityBadge(bomb: BombForm): boolean {
+    return bomb.identidade !== 'Nenhuma' && !nameMatchesIdentity(bomb.name || '', bomb.identidade);
+  }
+
+  /** Aplica a correção sugerida no formulário; só vai para o ESP32 ao tocar em Salvar. */
+  applyFix(suggestion: Suggestion): void {
+    const fix = suggestion.correcao;
+    if (fix?.tipo !== 'mover-horario') return;
+    const schedule = this.bombs.find((bomb) => bomb.id === fix.pumpId)?.schedules[fix.scheduleIndex];
+    if (schedule) schedule.timeValue = this.formatTime(fix.hour, fix.minute);
+  }
+
+  async suggestTimes(): Promise<void> {
+    const bombs = this.bombs.map((bomb) => this.toConfigPayload(bomb));
+    const changes = autoSchedule(bombs, this.rulesData());
+    if (!changes.length) {
+      this.toastMessage = 'Os horários já estão bem distribuídos.';
+      this.toastOpen = true;
+      return;
+    }
+
+    const lines = changes.map((change) => {
+      const times = change.antes.map((antes, i) => (antes === change.depois[i] ? `${antes} (mantém)` : `${antes} → ${change.depois[i]}`));
+      return `${change.title}\n${times.join('\n')}`;
+    });
+    const alert = await this.alerts.create({
+      header: 'Horário automático',
+      cssClass: 'alert-pre',
+      message: `${lines.join('\n\n')}\n\nEspalha as doses no dia e afasta os produtos que não combinam (ex.: KH e Cálcio). Doses e dias não mudam.`,
+      buttons: [
+        { text: 'Cancelar', role: 'cancel' },
+        { text: 'Aplicar', role: 'confirm' },
+      ],
+    });
+    await alert.present();
+    const { role } = await alert.onDidDismiss();
+    if (role !== 'confirm') return;
+
+    for (const change of changes) {
+      const bomb = this.bombs.find((item) => item.id === change.pumpId);
+      for (const time of change.horarios) {
+        const schedule = bomb?.schedules[time.scheduleIndex];
+        if (schedule) schedule.timeValue = this.formatTime(time.hour, time.minute);
+      }
+    }
+    this.toastMessage = 'Horários aplicados. Revise e toque em Salvar.';
+    this.toastOpen = true;
   }
 
   /** Volume em pt-BR com 1 a 2 casas (ex.: 2,0 · 0,43). */
@@ -295,10 +386,15 @@ export class ConfiguracaoPage {
     try {
       const payload = this.bombs.map((bomb) => this.toConfigPayload(bomb));
       await firstValueFrom(this.doser.saveConfig(payload));
+      if (this.dosingData && this.identitiesChanged()) {
+        const data = this.rulesData();
+        await firstValueFrom(this.doser.saveDosingData(data));
+        this.dosingData = data;
+      }
       this.savedSnapshot = this.snapshot();
       this.toastMessage = 'Configuracoes salvas com sucesso.';
       this.toastOpen = true;
-      void this.checkRules(payload);
+      if (this.dosingData) void this.notifications.sync(payload, this.dosingData);
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : 'Falha ao salvar configuracoes.';
     } finally {
@@ -327,33 +423,25 @@ export class ConfiguracaoPage {
   }
 
   private snapshot(): string {
-    return JSON.stringify(this.bombs.map((bomb) => this.toConfigPayload(bomb)));
+    return JSON.stringify(this.bombs.map((bomb) => ({ ...this.toConfigPayload(bomb), identidade: bomb.identidade })));
   }
 
-  // Tipo de produto (KH, Cálcio…) cadastrado em Produtos; firmware antigo sem /dosing apenas não mostra
-  private async loadIdentities(bombs: BombConfig[]): Promise<void> {
-    try {
-      const data = await firstValueFrom(this.doser.getDosingData(bombs.map((bomb) => bomb.id)));
-      this.identities = data.pumps.reduce<Record<number, string>>((acc, pump) => {
-        if (pump.identidade !== 'Nenhuma') acc[pump.pumpId] = IDENTITIES[pump.identidade].label;
-        return acc;
-      }, {});
-    } catch {
-      this.identities = {};
-    }
+  /** Perfil do aquário com os tipos escolhidos nesta tela (sem /dosing, usa os padrões). */
+  private rulesData(): DosingData {
+    const base = this.dosingData ?? normalizeDosingData({}, this.bombs.map((bomb) => bomb.id));
+    return {
+      ...base,
+      pumps: base.pumps.map((pump) => {
+        const bomb = this.bombs.find((item) => item.id === pump.pumpId);
+        return bomb ? { ...pump, identidade: bomb.identidade } : pump;
+      }),
+    };
   }
 
-  // Avisos não bloqueantes sobre a agenda salva + reagendamento das notificações
-  private async checkRules(bombs: BombConfig[]): Promise<void> {
-    try {
-      const data = await firstValueFrom(this.doser.getDosingData(bombs.map((bomb) => bomb.id)));
-      this.ruleWarnings = evaluateRules({ bombs, data, now: new Date() }).filter((suggestion) =>
-        SCHEDULE_RULES.some((prefix) => suggestion.id.startsWith(prefix)),
-      );
-      void this.notifications.sync(bombs, data);
-    } catch {
-      this.ruleWarnings = [];
-    }
+  private identitiesChanged(): boolean {
+    return this.bombs.some(
+      (bomb) => (this.dosingData?.pumps.find((pump) => pump.pumpId === bomb.id)?.identidade ?? 'Nenhuma') !== bomb.identidade,
+    );
   }
 
   private findDuplicateTimes(): string {
@@ -372,7 +460,7 @@ export class ConfiguracaoPage {
   }
 
   private toConfigPayload(bomb: BombForm): BombConfig {
-    const { editingIndex, color, colorBg, ...rest } = bomb;
+    const { editingIndex, identidade, color, colorBg, ...rest } = bomb;
     const schedules = bomb.schedules.map((schedule) => {
       const [hour, minute] = schedule.timeValue.split(':').map((value) => Number(value));
       const { timeValue, ...scheduleRest } = schedule;
@@ -405,6 +493,7 @@ export class ConfiguracaoPage {
     return {
       ...bomb,
       editingIndex: null,
+      identidade: this.dosingData?.pumps.find((pump) => pump.pumpId === bomb.id)?.identidade ?? 'Nenhuma',
       color,
       colorBg: this.colorWithAlpha(color, 0.12),
       schedules: bomb.schedules.map((schedule) => ({

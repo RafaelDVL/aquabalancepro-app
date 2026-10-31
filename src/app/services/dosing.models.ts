@@ -1,8 +1,31 @@
-export type PumpIdentity = 'KH' | 'Ca' | 'Mg' | 'K' | 'Carbono' | 'Outro' | 'Nenhuma';
+export type PumpIdentity =
+  | 'KH'
+  | 'Ca'
+  | 'Mg'
+  | 'K'
+  | 'Iodo'
+  | 'Ferro'
+  | 'Estroncio'
+  | 'Tracos'
+  | 'Nitrato'
+  | 'Fosfato'
+  | 'Carbono'
+  | 'Aminoacidos'
+  | 'Bacterias'
+  | 'Alimento'
+  | 'Sal'
+  | 'Kalkwasser'
+  | 'Outro'
+  | 'Nenhuma';
 export type MeasuredParam = 'KH' | 'Ca' | 'Mg';
+
+export type IdentityGroup = 'Macroelementos' | 'Microelementos' | 'Nutrientes' | 'Carbono e alimentação' | 'Outros';
 
 export interface IdentityInfo {
   label: string;
+  /** Rótulo curto para selos (ex.: "Cálcio", "Traços"). */
+  short: string;
+  group: IdentityGroup;
   unit: string;
   measured: boolean;
   limiteDiario: number;
@@ -11,16 +34,68 @@ export interface IdentityInfo {
 
 // Limites de referência; o usuário pode sobrescrever por bomba em Produtos.
 export const IDENTITIES: Record<PumpIdentity, IdentityInfo> = {
-  KH: { label: 'KH (Alcalinidade)', unit: 'dKH', measured: true, limiteDiario: 0.5, precisaoTeste: 0.2 },
-  Ca: { label: 'Cálcio', unit: 'ppm', measured: true, limiteDiario: 15, precisaoTeste: 10 },
-  Mg: { label: 'Magnésio', unit: 'ppm', measured: true, limiteDiario: 50, precisaoTeste: 30 },
-  K: { label: 'Potássio', unit: 'ppm', measured: false, limiteDiario: 10, precisaoTeste: 10 },
-  Carbono: { label: 'Carbono', unit: '', measured: false, limiteDiario: 0, precisaoTeste: 0 },
-  Outro: { label: 'Outro', unit: '', measured: false, limiteDiario: 0, precisaoTeste: 0 },
-  Nenhuma: { label: 'Não definido', unit: '', measured: false, limiteDiario: 0, precisaoTeste: 0 },
+  KH: { label: 'KH (Alcalinidade)', short: 'KH', group: 'Macroelementos', unit: 'dKH', measured: true, limiteDiario: 0.5, precisaoTeste: 0.2 },
+  Ca: { label: 'Cálcio', short: 'Cálcio', group: 'Macroelementos', unit: 'ppm', measured: true, limiteDiario: 15, precisaoTeste: 10 },
+  Mg: { label: 'Magnésio', short: 'Magnésio', group: 'Macroelementos', unit: 'ppm', measured: true, limiteDiario: 50, precisaoTeste: 30 },
+  Sal: { label: 'Reef salt / sal sem NaCl', short: 'Sal', group: 'Macroelementos', unit: '', measured: false, limiteDiario: 0, precisaoTeste: 0 },
+  Kalkwasser: { label: 'Kalkwasser', short: 'Kalk', group: 'Macroelementos', unit: '', measured: false, limiteDiario: 0, precisaoTeste: 0 },
+  K: { label: 'Potássio', short: 'Potássio', group: 'Microelementos', unit: 'ppm', measured: false, limiteDiario: 10, precisaoTeste: 10 },
+  Iodo: { label: 'Iodo', short: 'Iodo', group: 'Microelementos', unit: 'ppm', measured: false, limiteDiario: 0, precisaoTeste: 0 },
+  Ferro: { label: 'Ferro', short: 'Ferro', group: 'Microelementos', unit: 'ppm', measured: false, limiteDiario: 0, precisaoTeste: 0 },
+  Estroncio: { label: 'Estrôncio', short: 'Estrôncio', group: 'Microelementos', unit: 'ppm', measured: false, limiteDiario: 0, precisaoTeste: 0 },
+  Tracos: { label: 'Elementos-traço (mix)', short: 'Traços', group: 'Microelementos', unit: '', measured: false, limiteDiario: 0, precisaoTeste: 0 },
+  Nitrato: { label: 'Nitrato (NO₃)', short: 'Nitrato', group: 'Nutrientes', unit: 'ppm', measured: false, limiteDiario: 0, precisaoTeste: 0 },
+  Fosfato: { label: 'Fosfato (PO₄)', short: 'Fosfato', group: 'Nutrientes', unit: 'ppm', measured: false, limiteDiario: 0, precisaoTeste: 0 },
+  Carbono: { label: 'Carbono (NoPox, vodka…)', short: 'Carbono', group: 'Carbono e alimentação', unit: '', measured: false, limiteDiario: 0, precisaoTeste: 0 },
+  Bacterias: { label: 'Bactérias / probióticos', short: 'Bactérias', group: 'Carbono e alimentação', unit: '', measured: false, limiteDiario: 0, precisaoTeste: 0 },
+  Aminoacidos: { label: 'Aminoácidos', short: 'Aminoácidos', group: 'Carbono e alimentação', unit: '', measured: false, limiteDiario: 0, precisaoTeste: 0 },
+  Alimento: { label: 'Alimento líquido / fito', short: 'Alimento', group: 'Carbono e alimentação', unit: '', measured: false, limiteDiario: 0, precisaoTeste: 0 },
+  Outro: { label: 'Outro', short: 'Outro', group: 'Outros', unit: '', measured: false, limiteDiario: 0, precisaoTeste: 0 },
+  Nenhuma: { label: 'Não definido', short: '', group: 'Outros', unit: '', measured: false, limiteDiario: 0, precisaoTeste: 0 },
 };
 
-export const IDENTITY_ORDER: PumpIdentity[] = ['KH', 'Ca', 'Mg', 'K', 'Carbono', 'Outro', 'Nenhuma'];
+export const IDENTITY_ORDER: PumpIdentity[] = [
+  'KH',
+  'Ca',
+  'Mg',
+  'Sal',
+  'Kalkwasser',
+  'K',
+  'Iodo',
+  'Ferro',
+  'Estroncio',
+  'Tracos',
+  'Nitrato',
+  'Fosfato',
+  'Carbono',
+  'Bacterias',
+  'Aminoacidos',
+  'Alimento',
+  'Outro',
+  'Nenhuma',
+];
+
+/** Tipos agrupados para os seletores (optgroup). */
+export const IDENTITY_GROUPS: { group: IdentityGroup; items: { value: PumpIdentity; label: string }[] }[] = IDENTITY_ORDER.reduce<
+  { group: IdentityGroup; items: { value: PumpIdentity; label: string }[] }[]
+>((acc, value) => {
+  const { group, label } = IDENTITIES[value];
+  const entry = acc.find((item) => item.group === group) ?? acc[acc.push({ group, items: [] }) - 1];
+  entry.items.push({ value, label });
+  return acc;
+}, []);
+
+/** Pares que não devem ser dosados perto um do outro; o primeiro é o que a sugestão move. */
+export const DEFAULT_INCOMPATIBLE_PAIRS: [PumpIdentity, PumpIdentity][] = [
+  ['KH', 'Ca'],
+  ['Kalkwasser', 'KH'],
+  ['Fosfato', 'Ca'],
+];
+
+/** O produto tem efeito mensurável cadastrável (ml em L sobem X unidade). */
+export function hasPotencyUnit(identidade: PumpIdentity): boolean {
+  return IDENTITIES[identidade].unit !== '';
+}
 export const MEASURED_PARAMS: MeasuredParam[] = ['KH', 'Ca', 'Mg'];
 export const SESSION_DAY_OPTIONS = [3, 5, 7, 10, 14];
 export const MAX_SESSIONS = 52;
@@ -103,7 +178,7 @@ export function defaultTankProfile(): TankProfile {
       limitePorDoseKH: 0.3,
       variacaoMaxCiclo: 0.3,
       diasEstoqueMin: 7,
-      paresIncompativeis: [['KH', 'Ca']],
+      paresIncompativeis: DEFAULT_INCOMPATIBLE_PAIRS.map(([a, b]) => [a, b] as [PumpIdentity, PumpIdentity]),
     },
     notificarDoses: true,
   };
@@ -153,6 +228,14 @@ function normalizePotency(raw: unknown): ProductPotency | null {
   return potency.doseMl > 0 && potency.porLitros > 0 && potency.eleva > 0 ? potency : null;
 }
 
+function mergePairs(base: [PumpIdentity, PumpIdentity][], extra: [PumpIdentity, PumpIdentity][]): [PumpIdentity, PumpIdentity][] {
+  const result = [...base];
+  for (const [a, b] of extra) {
+    if (!result.some(([x, y]) => (x === a && y === b) || (x === b && y === a))) result.push([a, b]);
+  }
+  return result;
+}
+
 /** Converte o JSON salvo no ESP32 (ou `{}`) num documento completo, com defaults para o que faltar. */
 export function normalizeDosingData(raw: unknown, pumpIds: number[]): DosingData {
   const source = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
@@ -176,11 +259,15 @@ export function normalizeDosingData(raw: unknown, pumpIds: number[]): DosingData
       limitePorDoseKH: toNumber(rawRules['limitePorDoseKH'], defaults.regras.limitePorDoseKH),
       variacaoMaxCiclo: toNumber(rawRules['variacaoMaxCiclo'], defaults.regras.variacaoMaxCiclo),
       diasEstoqueMin: toNumber(rawRules['diasEstoqueMin'], defaults.regras.diasEstoqueMin),
-      paresIncompativeis: Array.isArray(rawRules['paresIncompativeis'])
-        ? (rawRules['paresIncompativeis'] as [PumpIdentity, PumpIdentity][]).filter(
-            (pair) => Array.isArray(pair) && pair.length === 2,
-          )
-        : defaults.regras.paresIncompativeis,
+      // Pares padrão sempre valem (não há tela para removê-los); os salvos somam aos padrões
+      paresIncompativeis: mergePairs(
+        defaults.regras.paresIncompativeis,
+        Array.isArray(rawRules['paresIncompativeis'])
+          ? (rawRules['paresIncompativeis'] as [PumpIdentity, PumpIdentity][]).filter(
+              (pair) => Array.isArray(pair) && pair.length === 2 && pair.every((id) => IDENTITY_ORDER.includes(id)),
+            )
+          : [],
+      ),
     },
     notificarDoses: rawTank['notificarDoses'] !== undefined ? Boolean(rawTank['notificarDoses']) : defaults.notificarDoses,
   };
@@ -234,7 +321,13 @@ export function precisaoTesteOf(profile: PumpProfile): number {
   return profile.precisaoTeste ?? IDENTITIES[profile.identidade].precisaoTeste;
 }
 
+/** O nome da bomba já diz o tipo (ex.: bomba "Calcio" com tipo Cálcio) — evita "Cálcio (Calcio)". */
+export function nameMatchesIdentity(name: string, identidade: PumpIdentity): boolean {
+  const plain = (value: string) => value.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+  return plain(name) === plain(IDENTITIES[identidade].short);
+}
+
 export function pumpTitle(profile: PumpProfile | undefined, name: string): string {
-  if (!profile || profile.identidade === 'Nenhuma') return name;
-  return `${IDENTITIES[profile.identidade].label} (${name})`;
+  if (!profile || profile.identidade === 'Nenhuma' || nameMatchesIdentity(name, profile.identidade)) return name;
+  return `${IDENTITIES[profile.identidade].short} (${name})`;
 }
