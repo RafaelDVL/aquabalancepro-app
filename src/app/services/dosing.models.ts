@@ -116,6 +116,10 @@ export interface PumpProfile {
   pumpId: number;
   identidade: PumpIdentity;
   produto: string;
+  /** Produto escolhido no catálogo (product-catalog.ts); null quando digitado à mão. */
+  catalogoId: string | null;
+  /** Concentração da solução feita com pó do catálogo (g por litro); null usa a receita do fabricante. */
+  gramasPorLitro: number | null;
   potencia: ProductPotency | null;
   vinculo: PumpLink | null;
   limiteDiario: number | null;
@@ -189,6 +193,8 @@ export function defaultPumpProfile(pumpId: number): PumpProfile {
     pumpId,
     identidade: 'Nenhuma',
     produto: '',
+    catalogoId: null,
+    gramasPorLitro: null,
     potencia: null,
     vinculo: null,
     limiteDiario: null,
@@ -283,6 +289,8 @@ export function normalizeDosingData(raw: unknown, pumpIds: number[]): DosingData
       pumpId,
       identidade,
       produto: typeof raw['produto'] === 'string' ? raw['produto'] : '',
+      catalogoId: typeof raw['catalogoId'] === 'string' ? raw['catalogoId'] : null,
+      gramasPorLitro: toOptionalNumber(raw['gramasPorLitro']),
       potencia: normalizePotency(raw['potencia']),
       vinculo: linkPump && linkFactor && linkFactor > 0 && linkPump !== pumpId ? { pumpId: linkPump, fator: linkFactor } : null,
       limiteDiario: toOptionalNumber(raw['limiteDiario']),

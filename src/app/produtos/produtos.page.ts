@@ -24,12 +24,15 @@ import {
   PumpProfile,
 } from '../services/dosing.models';
 import { DoseNotificationsService } from '../services/dose-notifications.service';
+import { CatalogProduct, catalogLabel, findCatalogProduct, powderPotency, productsFor } from '../services/product-catalog';
 
 interface PumpForm {
   pumpId: number;
   nome: string;
   identidade: PumpIdentity;
   produto: string;
+  catalogoId: string | null;
+  gramasPorLitro: number | null;
   doseMl: number | null;
   porLitros: number | null;
   eleva: number | null;
@@ -113,6 +116,47 @@ export class ProdutosPage {
     return hasPotencyUnit(form.identidade);
   }
 
+  catalogOptions(form: PumpForm): CatalogProduct[] {
+    return productsFor(form.identidade);
+  }
+
+  catalogLabel(product: CatalogProduct): string {
+    return catalogLabel(product);
+  }
+
+  catalogProduct(form: PumpForm): CatalogProduct | undefined {
+    return findCatalogProduct(form.catalogoId);
+  }
+
+  /** Produto do catálogo preenche nome e potência; "Outro" libera o campo de texto. */
+  selectCatalog(form: PumpForm, id: string | null): void {
+    form.catalogoId = id;
+    const product = findCatalogProduct(id);
+    if (!product) return;
+    form.produto = catalogLabel(product);
+    form.gramasPorLitro = product.po?.receitaGramasPorLitro ?? null;
+    if (product.potencia) {
+      form.doseMl = product.potencia.doseMl;
+      form.porLitros = product.potencia.porLitros;
+      form.eleva = product.potencia.eleva;
+    }
+  }
+
+  /** Pó do catálogo: a potência acompanha a concentração da solução que o usuário preparou. */
+  updateConcentration(form: PumpForm): void {
+    const po = this.catalogProduct(form)?.po;
+    const gramas = Number(form.gramasPorLitro);
+    if (!po || !Number.isFinite(gramas) || gramas <= 0) return;
+    const potency = powderPotency(po, gramas);
+    form.doseMl = potency.doseMl;
+    form.porLitros = potency.porLitros;
+    form.eleva = potency.eleva;
+  }
+
+  onIdentityChange(form: PumpForm): void {
+    if (this.catalogProduct(form)?.identidade !== form.identidade) form.catalogoId = null;
+  }
+
   linkOptions(form: PumpForm): PumpForm[] {
     return this.forms.filter((other) => other.pumpId !== form.pumpId);
   }
@@ -150,6 +194,8 @@ export class ProdutosPage {
       nome: bomb?.name || `Bomba ${profile.pumpId}`,
       identidade: profile.identidade,
       produto: profile.produto,
+      catalogoId: profile.catalogoId,
+      gramasPorLitro: profile.gramasPorLitro ?? findCatalogProduct(profile.catalogoId)?.po?.receitaGramasPorLitro ?? null,
       doseMl: profile.potencia?.doseMl ?? null,
       porLitros: profile.potencia?.porLitros ?? null,
       eleva: profile.potencia?.eleva ?? null,
@@ -171,6 +217,8 @@ export class ProdutosPage {
       pumpId: form.pumpId,
       identidade: form.identidade,
       produto: form.produto.trim(),
+      catalogoId: form.catalogoId,
+      gramasPorLitro: this.catalogProduct(form)?.po ? positive(form.gramasPorLitro) : null,
       potencia: this.hasPotency(form) && doseMl && porLitros && eleva ? { doseMl, porLitros, eleva } : null,
       vinculo: linkPump && linkFactor && linkPump !== form.pumpId ? { pumpId: linkPump, fator: linkFactor } : null,
       limiteDiario: positive(form.limiteDiario),

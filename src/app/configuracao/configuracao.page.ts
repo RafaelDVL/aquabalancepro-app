@@ -32,6 +32,7 @@ import {
   nameMatchesIdentity,
   normalizeDosingData,
 } from '../services/dosing.models';
+import { CatalogProduct, catalogLabel, findCatalogProduct, productsFor } from '../services/product-catalog';
 
 const SCHEDULE_RULES = ['espaco-', 'dose-concentrada-', 'teto-diario-', 'kh-noite-'];
 
@@ -43,6 +44,7 @@ interface ScheduleForm extends ScheduleConfig {
 interface BombForm extends BombConfig {
   editingIndex: number | null;
   identidade: PumpIdentity;
+  catalogoId: string | null;
   schedules: ScheduleForm[];
   color: string;
   colorBg: string;
@@ -243,6 +245,18 @@ export class ConfiguracaoPage {
     return IDENTITIES[bomb.identidade].short;
   }
 
+  catalogOptions(bomb: BombForm): CatalogProduct[] {
+    return productsFor(bomb.identidade);
+  }
+
+  catalogLabel(product: CatalogProduct): string {
+    return catalogLabel(product);
+  }
+
+  onIdentityChange(bomb: BombForm): void {
+    if (findCatalogProduct(bomb.catalogoId)?.identidade !== bomb.identidade) bomb.catalogoId = null;
+  }
+
   showIdentityBadge(bomb: BombForm): boolean {
     return bomb.identidade !== 'Nenhuma' && !nameMatchesIdentity(bomb.name || '', bomb.identidade);
   }
@@ -386,7 +400,7 @@ export class ConfiguracaoPage {
     try {
       const payload = this.bombs.map((bomb) => this.toConfigPayload(bomb));
       await firstValueFrom(this.doser.saveConfig(payload));
-      if (this.dosingData && this.identitiesChanged()) {
+      if (this.dosingData && this.profilesChanged()) {
         const data = this.rulesData();
         await firstValueFrom(this.doser.saveDosingData(data));
         this.dosingData = data;
@@ -423,25 +437,38 @@ export class ConfiguracaoPage {
   }
 
   private snapshot(): string {
-    return JSON.stringify(this.bombs.map((bomb) => ({ ...this.toConfigPayload(bomb), identidade: bomb.identidade })));
+    return JSON.stringify(
+      this.bombs.map((bomb) => ({ ...this.toConfigPayload(bomb), identidade: bomb.identidade, catalogoId: bomb.catalogoId })),
+    );
   }
 
-  /** Perfil do aquário com os tipos escolhidos nesta tela (sem /dosing, usa os padrões). */
+  /** Perfil do aquário com o tipo e o produto escolhidos nesta tela (sem /dosing, usa os padrões). */
   private rulesData(): DosingData {
     const base = this.dosingData ?? normalizeDosingData({}, this.bombs.map((bomb) => bomb.id));
     return {
       ...base,
       pumps: base.pumps.map((pump) => {
         const bomb = this.bombs.find((item) => item.id === pump.pumpId);
-        return bomb ? { ...pump, identidade: bomb.identidade } : pump;
+        if (!bomb) return pump;
+        // Produto novo do catálogo traz nome e potência; "Outro" mantém o que já estava cadastrado
+        const product = bomb.catalogoId !== pump.catalogoId ? findCatalogProduct(bomb.catalogoId) : undefined;
+        return {
+          ...pump,
+          identidade: bomb.identidade,
+          catalogoId: bomb.catalogoId,
+          ...(product
+            ? { produto: catalogLabel(product), potencia: product.potencia ?? pump.potencia, gramasPorLitro: null }
+            : {}),
+        };
       }),
     };
   }
 
-  private identitiesChanged(): boolean {
-    return this.bombs.some(
-      (bomb) => (this.dosingData?.pumps.find((pump) => pump.pumpId === bomb.id)?.identidade ?? 'Nenhuma') !== bomb.identidade,
-    );
+  private profilesChanged(): boolean {
+    return this.bombs.some((bomb) => {
+      const pump = this.dosingData?.pumps.find((item) => item.pumpId === bomb.id);
+      return (pump?.identidade ?? 'Nenhuma') !== bomb.identidade || (pump?.catalogoId ?? null) !== bomb.catalogoId;
+    });
   }
 
   private findDuplicateTimes(): string {
@@ -494,6 +521,7 @@ export class ConfiguracaoPage {
       ...bomb,
       editingIndex: null,
       identidade: this.dosingData?.pumps.find((pump) => pump.pumpId === bomb.id)?.identidade ?? 'Nenhuma',
+      catalogoId: this.dosingData?.pumps.find((pump) => pump.pumpId === bomb.id)?.catalogoId ?? null,
       color,
       colorBg: this.colorWithAlpha(color, 0.12),
       schedules: bomb.schedules.map((schedule) => ({

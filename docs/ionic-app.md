@@ -147,7 +147,7 @@ interface BombForm extends BombConfig {
 1. Ao entrar, carrega a configuração (`getConfig()`) e, se houver, o tipo de cada bomba (`getDosingData()`)
 2. Card fechado: nome, tipo, dose média/dia, próxima dose e quantidade de horários ativos
 3. Card aberto: nome + cor, **tipo de produto** (seletor agrupado: macro, micro, nutrientes, carbono e
-   alimentação, outros), **estoque** (ml, com botão "Reabasteci" que lembra o tamanho do frasco) e a lista
+   alimentação, outros) e **produto do catálogo** (traz a potência do fabricante), **estoque** (ml, com botão "Reabasteci" que lembra o tamanho do frasco) e a lista
    dos 3 horários (hora, dose, dias, toggle). Toque numa linha abre o editor: horário, dose (passo 0,5 ml,
    0,5–15 ml, atalhos) e dias com atalhos Todos / Seg–Sex / Fim de semana
 4. Com alterações pendentes aparece uma barra fixa "Alterações não salvas" (Descartar / Salvar); sair da tela
@@ -232,6 +232,15 @@ calcula a nova dose diária de cada bomba.
 Volume e alvos do aquário, fotoperíodo, e por bomba: tipo (KH, Cálcio, Magnésio, Reef salt, Kalkwasser, Potássio, Iodo, Ferro, Estrôncio, elementos-traço,
 Nitrato, Fosfato, Carbono, Bactérias, Aminoácidos, Alimento líquido, Outro; também escolhido na Configuração), produto, potência do
 rótulo, vínculo com outra bomba, limites e regras. Tudo salvo no ESP32 via `GET/POST /dosing`.
+
+**Catálogo de produtos** (`services/product-catalog.ts`): cerca de 80 suplementos líquidos (Aquaforest, Red Sea,
+Tropic Marin, Fauna Marin, Brightwell, Seachem, Veromar, OceanTech) com a potência publicada pelo fabricante e o link
+da fonte. Ao escolher o tipo, o seletor "Produto" lista só os daquele tipo; escolher um preenche nome e potência
+(o perfil guarda `catalogoId`), e "Outro" libera o campo de texto. Produtos em pó (Balling Aquaforest, Red Sea, Veromar)
+guardam a potência por grama (`po.elevaPorGrama`): em Produtos o usuário informa a concentração da solução que
+preparou (g/L, padrão = receita do fabricante) e a potência é recalculada (`powderPotency`, salvo em `gramasPorLitro`). Ficaram de fora os que não publicam número (All-For-Reef, Trace-Colors D, ESV B-Ionic…).
+Para adicionar um produto, inclua uma linha no array com `fonte` oficial; `product-catalog.spec.ts` confere ids,
+tipos e potências.
 
 ### Notificações locais (`services/dose-notifications.service.ts`)
 
@@ -399,6 +408,7 @@ Tema escuro fixo, definido em `theme/variables.scss`:
 | `services/dosing-advisor.spec.ts` | Cálculo do ajuste e repartição em 0,5 ml |
 | `services/dosing-rules.spec.ts` | Regras e sugestões |
 | `services/auto-schedule.spec.ts` | Horário automático |
+| `services/product-catalog.spec.ts` | Consistência do catálogo de produtos |
 | `services/dose-check.spec.ts` | Conferência de doses no log |
 | `services/today-summary.spec.ts` | Resumo do dia da Home |
 | `services/log-analytics.spec.ts` | Agrupamento, estatísticas, séries e CSV dos logs |

@@ -63,7 +63,7 @@
         <div class="grid grid-cols-2 gap-2">
           <label class="space-y-1">
             <span class="text-[11px] text-white/50">Tipo</span>
-            <select [(ngModel)]="form.identidade" class="field">
+            <select [(ngModel)]="form.identidade" (ngModelChange)="onIdentityChange(form)" class="field">
               <optgroup *ngFor="let group of identityGroups" [label]="group.group">
                 <option *ngFor="let identity of group.items" [ngValue]="identity.value">{{ identity.label }}</option>
               </optgroup>
@@ -71,9 +71,29 @@
           </label>
           <label class="space-y-1">
             <span class="text-[11px] text-white/50">Produto</span>
-            <input type="text" maxlength="40" [(ngModel)]="form.produto" class="field" placeholder="Ex.: Aquaforest KH" />
+            <select [ngModel]="form.catalogoId" (ngModelChange)="selectCatalog(form, $event)" class="field"
+              [disabled]="form.identidade === 'Nenhuma'">
+              <option *ngFor="let product of catalogOptions(form)" [ngValue]="product.id">{{ catalogLabel(product) }}</option>
+              <option [ngValue]="null">Outro (digitar)</option>
+            </select>
           </label>
         </div>
+
+        <input *ngIf="!form.catalogoId && form.identidade !== 'Nenhuma'" type="text" maxlength="40" [(ngModel)]="form.produto"
+          class="field" placeholder="Nome do produto" aria-label="Nome do produto" />
+        <div *ngIf="catalogProduct(form)?.po as po" class="space-y-1">
+          <span class="text-[11px] text-white/50">Concentração da sua solução</span>
+          <div class="flex items-center gap-2 text-sm text-white/70">
+            <input type="number" min="1" step="1" [(ngModel)]="form.gramasPorLitro" (ngModelChange)="updateConcentration(form)"
+              class="field w-24" aria-label="Gramas de pó por litro" />
+            <span>g de pó por litro de solução</span>
+          </div>
+          <p class="text-[11px] text-white/40">Receita do fabricante: {{ po.receitaGramasPorLitro }} g/L. A potência abaixo é recalculada.</p>
+        </div>
+        <p *ngIf="catalogProduct(form) as product" class="text-[11px] text-white/50">
+          Potência do fabricante<ng-container *ngIf="product.obs"> · {{ product.obs }}</ng-container> ·
+          <a [href]="product.fonte" target="_blank" rel="noopener" class="text-cyan-300 underline">fonte</a>
+        </p>
 
         <div *ngIf="hasPotency(form)" class="space-y-1">
           <span class="text-[11px] text-white/50">Potência (do rótulo do produto)</span>

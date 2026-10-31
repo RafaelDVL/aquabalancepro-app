@@ -81,6 +81,8 @@ function entries(ctx: RulesContext): PumpEntry[] {
       pumpId: bomb.id,
       identidade: 'Nenhuma' as PumpIdentity,
       produto: '',
+      catalogoId: null,
+      gramasPorLitro: null,
       potencia: null,
       vinculo: null,
       limiteDiario: null,

@@ -97,15 +97,26 @@
             </div>
 
             <!-- Tipo de produto -->
-            <label *ngIf="dosingData" class="block space-y-1">
-              <span class="text-xs text-text-muted">Tipo de produto</span>
-              <select [(ngModel)]="bomb.identidade" class="field">
-                <optgroup *ngFor="let group of identityGroups" [label]="group.group">
-                  <option *ngFor="let identity of group.items" [ngValue]="identity.value">{{ identity.label }}</option>
-                </optgroup>
-              </select>
-              <span class="block text-[11px] text-text-muted">Usado para checar horários (ex.: KH longe do Cálcio). Potência e produto ficam em Produtos.</span>
-            </label>
+            <div *ngIf="dosingData" class="space-y-1">
+              <div class="grid grid-cols-2 gap-2">
+                <label class="space-y-1">
+                  <span class="text-xs text-text-muted">Tipo de produto</span>
+                  <select [(ngModel)]="bomb.identidade" (ngModelChange)="onIdentityChange(bomb)" class="field">
+                    <optgroup *ngFor="let group of identityGroups" [label]="group.group">
+                      <option *ngFor="let identity of group.items" [ngValue]="identity.value">{{ identity.label }}</option>
+                    </optgroup>
+                  </select>
+                </label>
+                <label class="space-y-1">
+                  <span class="text-xs text-text-muted">Produto</span>
+                  <select [(ngModel)]="bomb.catalogoId" class="field" [disabled]="bomb.identidade === 'Nenhuma'">
+                    <option *ngFor="let product of catalogOptions(bomb)" [ngValue]="product.id">{{ catalogLabel(product) }}</option>
+                    <option [ngValue]="null">Outro / não listado</option>
+                  </select>
+                </label>
+              </div>
+              <span class="block text-[11px] text-text-muted">O tipo checa os horários (ex.: KH longe do Cálcio); o produto traz a potência do fabricante. Detalhes em Produtos.</span>
+            </div>
 
             <!-- Estoque -->
             <div class="space-y-1">
