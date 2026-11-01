@@ -1,0 +1,9 @@
+{
+  "name": "aquabalancepro",
+  "productName": "AquaBalancePro",
+  "version": "1.0.0",
+  "description": "Controle da dosadora AquaBalancePro (ESP32) no PC",
+  "author": "Rafael Dias Rodrigues",
+  "main": "main.js",
+  "private": true
+}

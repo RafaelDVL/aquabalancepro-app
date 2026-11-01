@@ -11,6 +11,7 @@ O aplicativo móvel para controle e monitoramento.
 - **Localização**: `/src/app`
 - **Tecnologias**: Ionic 8, Angular 20, Tailwind CSS 4, Capacitor 8.
 - **Telas**: Home, Configuração, Calibração, Ajuste de Dosagem, Produtos, Logs, Analytics.
+- **PC**: o mesmo app empacotado com Electron (`electron/`, `npm run build:pc` → `dist-pc/`).
 
 ### 🤖 Firmware (ESP32)
 

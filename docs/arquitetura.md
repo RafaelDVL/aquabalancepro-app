@@ -25,6 +25,9 @@ graph TD
 
 - **Framework**: Ionic 8 + Angular 20 (standalone components, 7 rotas lazy)
 - **Nativo**: Capacitor 8; plugin próprio `WifiBinding` no Android
+- **PC**: Electron (`electron/main.js`). Serve o `www/` num servidor HTTP local na porta fixa 47890 (o
+  localStorage depende da origem) e abre numa janela; o app fala com o ESP32 como no navegador (o firmware
+  libera CORS). Os plugins do Capacitor viram no-op, e a exportação de CSV vira um download.
 - **Estilo**: Tailwind CSS 4 + componentes Ionic, tema escuro "ocean"
 - **Camadas**:
   - **Páginas** (`home`, `configuracao`, `calibracao`, `ajuste`, `produtos`, `logs`, `analytics`): estado local,

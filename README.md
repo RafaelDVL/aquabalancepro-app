@@ -55,6 +55,7 @@ bombas) e agenda as notificações sozinho a partir da agenda das bombas.
 │   └── src/main.cpp        # Firmware monolítico (~1670 linhas)
 ├── android/                # Projeto Android (Capacitor) + plugin nativo WifiBinding
 ├── ios/                    # Projeto iOS (Capacitor)
+├── electron/main.js        # Versão de PC: janela + servidor local do www/ (npm run build:pc)
 ├── scripts/phone-debug.mjs # Depuração do app no celular via USB (npm run debug:phone)
 ├── docs/                   # Documentação detalhada
 └── assets/                 # Imagens e logos
@@ -105,6 +106,15 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 npm run debug:phone                          # console, erros e requisições do app no celular
 ```
 
+### PC (Windows, Electron)
+```bash
+npm run pc                     # Compila e abre o app numa janela (desenvolvimento)
+npm run build:pc               # Gera dist-pc/AquaBalancePro Setup 1.0.0.exe (instalador) e o .exe portátil
+```
+O app compilado (`www/`) é servido por um servidor local em `http://127.0.0.1:47890` dentro do Electron
+(`electron/main.js`) e chama o ESP32 direto, como no navegador. O PC precisa estar no Wi-Fi `AquaBalancePro`.
+Notificações de dose continuam só no celular.
+
 ### Firmware (ESP32)
 ```bash
 cd esp32
@@ -138,6 +148,7 @@ pio device monitor             # Serial monitor (115200 baud)
 |---|---|
 | **Frontend** | Ionic 8, Angular 20 (standalone), Tailwind CSS v4, Chart.js 4, RxJS 7.8 |
 | **Mobile** | Capacitor 8 (Android + iOS): local-notifications, filesystem, share, plugin nativo WifiBinding |
+| **Desktop** | Electron 45 + electron-builder (instalador NSIS e .exe portátil para Windows) |
 | **Firmware** | PlatformIO, Arduino core 2.0.17 (`espressif32@6.9.0`), ESP32-S3 |
 | **Bibliotecas** | ESPAsyncWebServer, AsyncTCP-esphome, RTClib, ArduinoJson 7, Adafruit NeoPixel |
 | **Persistência** | NVS Preferences (config), LittleFS (logs e Ajuste de Dosagem) |
