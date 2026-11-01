@@ -18,30 +18,27 @@ Documentação completa do aplicativo Ionic/Angular para controle e monitorament
 ```
 src/
 ├── app/
-│   ├── home/                 # Dashboard principal
-│   │   ├── home.page.ts
-│   │   ├── home.page.html
-│   │   ├── home.page.scss
-│   │   └── home.page.spec.ts
-│   ├── configuracao/         # Configuração de bombas
-│   │   ├── configuracao.page.ts
-│   │   ├── configuracao.page.html
-│   │   └── configuracao.page.scss
-│   ├── calibracao/           # Calibração de bombas
-│   │   ├── calibracao.page.ts
-│   │   ├── calibracao.page.html
-│   │   └── calibracao.page.scss
-│   ├── logs/                 # Histórico de dosagens
-│   │   ├── logs.page.ts
-│   │   ├── logs.page.html
-│   │   └── logs.page.scss
-│   ├── analytics/            # Gráficos
-│   │   ├── analytics.page.ts
-│   │   ├── analytics.page.html
-│   │   └── analytics.page.scss
+│   ├── home/                 # Dashboard: dispositivo, avisos, resumo do dia, menu
+│   ├── configuracao/         # Bombas, horários, tipo/produto, estoque, horário automático
+│   ├── calibracao/           # Calibração guiada, dose manual e "Ligar até eu desligar"
+│   ├── logs/                 # Histórico agrupado por dia + exportar CSV
+│   ├── analytics/            # Timeline do dia, barras 7/30 dias, parâmetros
+│   ├── ajuste/               # Ajuste de Dosagem (ciclo de testes KH/Ca/Mg)
+│   ├── produtos/             # Aquário (volume, alvos, fotoperíodo) e produto de cada bomba
 │   ├── services/
-│   │   ├── doser.service.ts      # API REST para o ESP32
-│   │   └── wifi-binding.service.ts # Bind de rede Wi-Fi (Android)
+│   │   ├── doser.service.ts              # API REST do ESP32 (com bind Wi-Fi e timeout)
+│   │   ├── wifi-binding.service.ts       # Ponte para o plugin nativo WifiBinding (Android)
+│   │   ├── dose-notifications.service.ts # Notificações locais de cada dose e do fim do teste
+│   │   ├── dosing.models.ts              # Schema do /dosing: aquário, perfis de bomba, sessões
+│   │   ├── dosing-advisor.ts             # Cálculo do ajuste e repartição em passos de 0,5 ml
+│   │   ├── dosing-rules.ts               # Regras e sugestões (KH↔Ca, estoque, relógio…)
+│   │   ├── auto-schedule.ts              # Horário automático das doses
+│   │   ├── product-catalog.ts            # ~80 suplementos com potência do fabricante
+│   │   ├── dose-check.ts                 # Doses programadas sem registro no log
+│   │   ├── today-summary.ts              # Resumo "Hoje" da Home
+│   │   ├── log-analytics.ts              # Parse, agrupamento, séries e CSV dos logs
+│   │   └── pump-colors.ts                # Cores das bombas (localStorage)
+│   │   (funções puras têm *.spec.ts ao lado)
 │   ├── app.component.ts
 │   ├── app.component.html
 │   ├── app.component.scss
@@ -71,9 +68,10 @@ O app usa Angular 20 **Standalone API**. Não há `NgModule`. O bootstrap é fei
 // main.ts
 bootstrapApplication(AppComponent, {
   providers: [
-    provideIonicAngular({ mode: 'md' }),
-    provideRouter(routes, withPreloading(PreloadAllModules)),
+    { provide: RouteReuseStrategy, useClass: IonicRouteStrategy },
+    provideIonicAngular(),
     provideHttpClient(),
+    provideRouter(routes, withPreloading(PreloadAllModules)),
   ],
 });
 ```
@@ -86,16 +84,27 @@ Definido em `app.routes.ts`:
 |---|---|---|
 | `''` | Redireciona → `/home` | — |
 | `home` | `HomePage` | Lazy (`loadComponent`) |
-| `configuracao` | `ConfiguracaoPage` | Lazy |
+| `configuracao` | `ConfiguracaoPage` | Lazy, com `canDeactivate` (confirma alterações não salvas) |
 | `calibracao` | `CalibracaoPage` | Lazy |
 | `logs` | `LogsPage` | Lazy |
 | `analytics` | `AnalyticsPage` | Lazy |
+| `ajuste` | `AjustePage` | Lazy |
+| `produtos` | `ProdutosPage` | Lazy |
 
 Todas as rotas usam `PreloadAllModules` para pré-carregar após o bootstrap. Navegação via `Router.navigateByUrl()`.
 
 ### Gerenciamento de Estado
 
-**Não há biblioteca de estado** (sem NgRx, NgXs, Akita, Signals). Cada página mantém seu estado localmente e recarrega dados do ESP32 ao entrar (`ionViewWillEnter`). O único dado persistente entre sessões é a cor personalizada das bombas, armazenada em `localStorage` (chave `abp-bomb-colores`). As cores default são: Bomba 1 = `#2DD4BF` (teal), Bomba 2 = `#F472B6` (pink), Bomba 3 = `#A855F7` (purple), Bomba 4 = `#3B82F6` (blue), Bomba 5 = `#F59E0B` (amber).
+**Não há biblioteca de estado** (sem NgRx, NgXs, Akita, Signals). Cada página mantém seu estado localmente e recarrega dados do ESP32 ao entrar (`ionViewWillEnter`). A fonte da verdade fica no ESP32: config das bombas (`/config`) e dados do Ajuste de Dosagem (`/dosing`), para celular e PC verem o mesmo.
+
+No `localStorage` ficam só preferências do aparelho:
+
+| Chave | Conteúdo |
+|---|---|
+| `abp-bomb-colors` | Cor personalizada de cada bomba |
+| `abp-refill-ml` | Tamanho do último frasco por bomba (botão "Reabasteci") |
+| `abp-ultima-conferencia` | Última vez que a Home conferiu os logs (doses sem registro) |
+ As cores default são: Bomba 1 = `#2DD4BF` (teal), Bomba 2 = `#F472B6` (pink), Bomba 3 = `#A855F7` (purple), Bomba 4 = `#3B82F6` (blue), Bomba 5 = `#F59E0B` (amber).
 
 ## Páginas
 
@@ -275,11 +284,14 @@ Reagenda ao abrir Home/Ajuste, salvar Configuração/Produtos e aplicar ajustes.
 | `runPump(bombId, acao)` | `POST /run` | Liga até desligar. Body: `{ "bomb": id, "acao": "ligar" \| "manter" \| "desligar" }`. |
 | `getLogs()` | `GET /logs` | Histórico. Aceita array direto ou `{ logs: [...] }`. |
 | `clearLogs()` | `DELETE /logs` | Apaga todos os logs. |
+| `getDosingData(pumpIds)` | `GET /dosing` | Dados do Ajuste de Dosagem, normalizados (`normalizeDosingData`). 404 vira "grave o firmware novo". |
+| `saveDosingData(data)` | `POST /dosing` | Grava o documento inteiro (o firmware só armazena). |
 
 **Mecanismo `withWifiBinding()`:** Cada chamada HTTP é embrulhada por um pipe que:
 1. Invoca `wifiBinding.bindToWifi()` (bind do processo ao Wi-Fi no Android)
 2. Ignora erros de bind (segue mesmo se falhar)
 3. Executa a requisição HTTP
+4. Corta em 10 s (`requestTimeoutMs`) com "O ESP32 não respondeu. Confira se o celular está no Wi-Fi AquaBalancePro."
 
 **Interfaces exportadas:**
 ```typescript
@@ -290,6 +302,7 @@ interface DeviceStatus {
   wifiIp?: string;
   apSsid?: string;
   apIp?: string;
+  run?: { bomb: number; ms: number };  // acionamento contínuo em andamento
 }
 
 interface BombConfig {
@@ -314,7 +327,7 @@ interface LogEntry {
   timestamp: string;       // "DD/MM/AAAA HH:mm:ss"
   bomba: string;
   dosagem: number;
-  origem: string;          // "Programado" | "Manual" | "Calibracao" ("Teste" em logs antigos)
+  origem: string;          // "Programado" | "Manual" | "Manual contínuo" | "Calibracao" ("Teste" em logs antigos)
 }
 
 interface ApiStatusResponse {
@@ -448,8 +461,16 @@ Home → /calibracao → GET /config
 
 ### Visualizar Analytics
 ```
-Home → /analytics → GET /config + GET /logs
-→ merge schedules + execuções do dia → renderizar Chart.js scatter
+Home → /analytics → GET /config + GET /logs + GET /dosing
+→ Dia: timeline Chart.js scatter | 7/30 dias: barras por bomba | Parâmetros: KH/Ca/Mg das sessões
+```
+
+### Ajuste de Dosagem
+```
+Produtos: volume, alvos e produto de cada bomba → POST /dosing
+→ /ajuste: mede KH/Ca (Mg opcional), escolhe o período → POST /dosing (abre sessão com snapshot das doses)
+→ mede de novo no fim → dosing-advisor calcula a nova dose/dia e reparte nos horários (0,5 ml)
+→ Aplicar: POST /config + POST /dosing (fecha a sessão e abre a próxima) → reagenda notificações
 ```
 
 ## Configurações de Build

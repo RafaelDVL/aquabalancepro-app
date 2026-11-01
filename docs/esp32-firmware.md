@@ -55,34 +55,34 @@ GND          ──────────── GND
 
 ## Estrutura do Código
 
-O firmware é **monolítico** em um único arquivo: `esp32/src/main.cpp` (1360 linhas).
+O firmware é **monolítico** em um único arquivo: `esp32/src/main.cpp` (~1670 linhas).
 
 ### Mapa do Arquivo
 
+Linhas aproximadas; as seções são separadas por comentários `// ====` no código.
+
 | Linhas | Seção | Descrição |
 |---|---|---|
-| 1–12 | **Includes** | WiFi.h, AsyncTCP.h, ESPAsyncWebServer.h, RTClib.h, ArduinoJson.h, Adafruit_NeoPixel.h, LittleFS.h, Preferences.h, time.h |
-| 14–32 | **Config Geral** | `TEMPO_POR_ML = 700` (ms/ml base), `BOMBA_COUNT = 5`, `SCHEDULE_COUNT = 3`, `PUMP_PINS[5] = {4,5,6,7,8}`, `MAX_PUMP_QUEUE = 18`, `CONFIG_DOC_SIZE = 10240`, `LOG_LIMIT = 2000`, `LOG_TRIM_BATCH = 200` |
-| 34–43 | **WiFi** | `AP_SSID = "AquaBalancePro"`, `AP_PASSWORD = "12345678"`, `STA_SSID` e `STA_PASSWORD` (placeholder), `isStaConfigured()` |
-| 45–49 | **Objetos Globais** | `RTC_DS3231 rtc`, `Preferences preferences`, `AsyncWebServer server(80)`, `Adafruit_NeoPixel statusLed` |
-| 51–62 | **Controle** | Timers de WiFi e NTP, flag `timeSynced` |
-| 64–84 | **Struct Schedule** | `hour`, `minute`, `dosagem`, `status`, `diasSemana[7]`, `lastRunMinute` |
-| 86–103 | **Struct Bomb** | `name`, `calibrCoef`, `quantidadeEstoque`, `schedules[SCHEDULE_COUNT]` |
-| 105 | **Bombas** | `bombas[BOMBA_COUNT]` — array global com as 5 bombas |
-| 97–112 | **Fila de Bombas** | `PumpJob` (bombId, duration, startTime, origem, active), buffer circular com `head`/`tail`, mutex `pumpQueueMux` |
-| 114–134 | **Flags + LED** | `rtcReady`, `prefsReady`, `fsReady`, `systemReady`, estado/modo/PWM do LED |
-| 136–199 | **Forward Declarations** | Protótipos de todas as funções |
-| 200–235 | **Helpers** | `formatTimestamp()`, `wifiStatusToString()`, `httpMethodToString()` |
-| 236–244 | **System** | `shouldPauseForAp()` — verifica clientes conectados ao AP |
-| 245–361 | **WiFi** | `onWiFiEvent()`, `setupWifi()`, `enableSta()`, `disableSta()`, `applyApPriority()`, `ensureStaWifi()`, `logWifiStatusChange()` |
-| 363–387 | **NTP** | `ensureTimeSynced()` — sincronia via `configTime()` com timeout de 3s |
-| 389–659 | **WebServer** | Handlers de todos os endpoints + CORS + 404 |
-| 661–802 | **Logs (LittleFS)** | `initLogStorage()`, `countLogLines()`, `trimLogFile()`, `appendLocalLog()` |
-| 804–1014 | **Config/JSON** | `inicializarBombas()`, `saveBombasConfig()`, `loadBombasConfig()`, `initDefaultBombasConfig()`, `buildConfigJson()`, `applyConfigJson()`, `parseBombData()`, `parseDateTime()` |
-| 1016–1074 | **Scheduler** | `checkSchedules()` — executa uma vez por minuto real |
-| 1076–1194 | **Pump Queue** | `enqueuePumpJob()`, `pumpPinForIndex()`, `finishPumpJob()`, `startNextPumpJob()`, `processPumpQueue()` |
-| 1196–1291 | **LED** | `setLedColor()`, `updateLedMode()`, `updateStatusLed()` |
-| 1293–1360 | **setup() + loop()** | Ponto de entrada e ciclo principal |
+| 1–13 | **Includes** | WiFi.h, AsyncTCP.h, ESPAsyncWebServer.h, RTClib.h, ArduinoJson.h, Adafruit_NeoPixel.h, LittleFS.h, Preferences.h, time.h |
+| 14–44 | **Config Geral** | `TEMPO_POR_ML = 700` (ms/ml base), `BOMBA_COUNT = 5`, `SCHEDULE_COUNT = 3`, `PUMP_PINS[5] = {4,5,6,7,8}`, `MAX_PUMP_QUEUE = 18`, `CONFIG_DOC_SIZE = 10240`, `LOG_LIMIT = 2000`, `LOG_TRIM_BATCH = 200`, arquivos `/logs.jsonl` e `/dosing.json` (`DOSING_MAX_SIZE = 16384`), `RUN_KEEPALIVE_MS = 4000`, `RUN_MAX_MS = 120000` |
+| 46–60 | **WiFi** | `AP_SSID = "AquaBalancePro"`, `AP_PASSWORD = "12345678"`, `STA_SSID` e `STA_PASSWORD` (placeholder), `isStaConfigured()` |
+| 62–66 | **Objetos Globais** | `RTC_DS3231 rtc`, `Preferences preferences`, `AsyncWebServer server(80)`, `Adafruit_NeoPixel statusLed` |
+| 68–80 | **Controle** | Timers de WiFi e NTP, flag `timeSynced` |
+| 81–118 | **Structs** | `Schedule` (`hour`, `minute`, `dosagem`, `status`, `diasSemana[7]`, `lastRunMinute`), `Bomb` (`name`, `calibrCoef`, `quantidadeEstoque`, `schedules[3]`) e o array global `bombas[5]` |
+| 120–135 | **Fila de Bombas** | `PumpJob` (`bombaIndex`, `dosagem`, `origem`, `timestamp`), buffer circular `pumpHead`/`pumpTail`, `activeJob`, mutex `pumpQueueMux` |
+| 137–141 | **Acionamento contínuo** | `continuousRun`, `runStartRequest`, `runStopRequested`, `runKeepAlive` (o handler HTTP só registra; o loop liga e desliga) |
+| 143–164 | **Flags + LED** | `rtcReady`, `prefsReady`, `fsReady`, `systemReady`, modo e piscas do LED |
+| 165–234 | **Forward Declarations** | Protótipos de todas as funções |
+| 235–278 | **Helpers + Estado** | `formatTimestamp()`, `wifiStatusToString()`, `shouldPauseForAp()` |
+| 279–410 | **WiFi** | `onWiFiEvent()`, `setupWifi()`, `enableSta()`, `disableSta()`, `applyApPriority()`, `ensureStaWifi()`, `ensureApIsUp()`, `logWifiStatusChange()` |
+| 411–438 | **NTP** | `ensureTimeSynced()` — sincronia via `configTime()` com timeout de 3s |
+| 439–894 | **WebServer** | Handlers de todos os endpoints (incl. `/run` e `/dosing`), `setupServer()`, `readRequestBody()`/`storeRequestBody()`, CORS + 404 |
+| 895–1037 | **Logs (LittleFS)** | `initLogStorage()`, `countLogLines()`, `trimLogFile()`, `appendLocalLog()` |
+| 1038–1266 | **Config/JSON** | `inicializarBombas()`, `saveBombasConfig()`, `loadBombasConfig()`, `initDefaultBombasConfig()`, `buildConfigJson()`, `applyConfigJson()`, `parseBombData()`, `parseDateTime()` |
+| 1267–1326 | **Scheduler** | `checkSchedules()` — executa uma vez por minuto real |
+| 1327–1507 | **Pump Queue** | `enqueuePumpJob()`, `pumpPinForIndex()`, `finishPumpJob()`, `startNextPumpJob()`, `startContinuousRun()`, `stopContinuousRun()`, `processPumpQueue()` |
+| 1508–1612 | **LED** | `setLedColor()`, `updateLedMode()`, `updateStatusLed()` |
+| 1613–1671 | **setup() + loop()** | Ponto de entrada e ciclo principal |
 
 ## Setup e Loop
 
@@ -577,22 +577,25 @@ void updateStatusLed() {
 
 ```ini
 [env:upesy_wroom]
-platform = espressif32
-board = upesy_wroom
+; Core Arduino 2.0.17: AsyncTCP-esphome 2.x não compila no core 3.x+
+platform = espressif32@6.9.0
+board = esp32-s3-devkitc-1
 framework = arduino
 board_build.partitions = huge_app.csv
 monitor_speed = 115200
 upload_speed = 921600
 lib_deps =
-    adafruit/RTClib @ ^2.1.4
-    bblanchon/ArduinoJson @ ^7.3.1
-    mobizt/Firebase Arduino Client Library for ESP8266 and ESP32 @ ^4.4.17
-    zeed/ESP Async WebServer @ 1.2.3
-    esphome/AsyncTCP-esphome @ ^2.1.4
-    adafruit/Adafruit NeoPixel @ ^1.12.0
+	adafruit/RTClib@^2.1.4
+	bblanchon/ArduinoJson@^7.3.1
+	mobizt/Firebase Arduino Client Library for ESP8266 and ESP32@^4.4.17
+	zeed/ESP Async WebServer@1.2.3
+	esphome/AsyncTCP-esphome@^2.1.4
+	adafruit/Adafruit NeoPixel@^1.12.0
 ```
 
-**Board:** `upesy_wroom` (ESP32-S3 devkit)
+**Plataforma:** fixada em `espressif32@6.9.0` (Arduino core 2.0.17). Versões mais novas trazem o core 3.x/4.x, onde
+o AsyncTCP-esphome 2.x não compila (`IPv6Address.h: No such file`).
+**Board:** `esp32-s3-devkitc-1` (ESP32-S3 devkit; o nome do ambiente `upesy_wroom` ficou do projeto original)
 **Partition scheme:** `huge_app.csv` (máximo espaço para app, LittleFS em partição dedicada)
 
 ### Constantes Ajustáveis (`main.cpp`)
@@ -650,9 +653,11 @@ constexpr long GMT_OFFSET_SEC = -3 * 3600;          // UTC-3 (BRT)
 | **Ciclo do loop** | ~100ms (delay(100) no final) |
 | **Consumo** | Sem deep sleep, esperado ~200-300mA com bombas desligadas |
 | **WiFi Sleep** | Desabilitado (`WiFi.setSleep(false)`) — prioriza latência |
-| **Fila de bombas** | Máximo 10 jobs simultâneos na fila |
+| **Fila de bombas** | Até 17 jobs na fila (`MAX_PUMP_QUEUE = 18`, buffer circular guarda N-1) |
+| **Acionamento contínuo** | Uma bomba por vez, no máximo 2 min; desliga sozinha após 4 s sem `manter` |
 | **Logs** | Máximo 2000 entradas no LittleFS (~220 KB); `GET /logs` é enviado em partes (chunked) para não carregar tudo na RAM |
-| **Config JSON** | Documento de até 8192 bytes (`CONFIG_DOC_SIZE`) |
+| **Config JSON** | Documento de até 10240 bytes (`CONFIG_DOC_SIZE`) |
+| **Ajuste de Dosagem** | `/dosing.json` de até 16 KB (`DOSING_MAX_SIZE`); acima disso `POST /dosing` responde 413 |
 | **NTP Timeout** | 3 segundos (não bloqueia loop) |
 | **I2C Speed** | Padrão (100kHz) |
 | **Precisão de dosagem** | Dependente da calibração e da bomba peristáltica |

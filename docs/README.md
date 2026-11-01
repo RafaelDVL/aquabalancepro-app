@@ -9,14 +9,15 @@ Bem-vindo à documentação do projeto **AquaBalancePro**.
 O aplicativo móvel para controle e monitoramento.
 
 - **Localização**: `/src/app`
-- **Tecnologias**: Ionic 8, Angular 20, Tailwind CSS.
+- **Tecnologias**: Ionic 8, Angular 20, Tailwind CSS 4, Capacitor 8.
+- **Telas**: Home, Configuração, Calibração, Ajuste de Dosagem, Produtos, Logs, Analytics.
 
 ### 🤖 Firmware (ESP32)
 
 O código embarcado para o controlador de dosagem.
 
 - **Localização**: `/esp32`
-- **Framework**: PlatformIO / Arduino Framework.
+- **Framework**: PlatformIO / Arduino Framework (`espressif32@6.9.0`).
 - **Hardware**: ESP32-S3, RTC DS3231, 5 bombas peristálticas.
 
 ## Documentos Disponíveis
